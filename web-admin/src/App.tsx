@@ -82,6 +82,7 @@ export default function App() {
   const [senders, setSenders] = useState<any[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [signedDocuments, setSignedDocuments] = useState<any[]>([]);
+  const [folders, setFolders] = useState<any[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -90,12 +91,13 @@ export default function App() {
       try {
         const { default: api } = await import('./utils/api');
         
-        const [compRes, empRes, senRes, tplRes, docRes] = await Promise.all([
+        const [compRes, empRes, senRes, tplRes, docRes, foldRes] = await Promise.all([
           api.get('/company'),
           api.get('/employees'),
           api.get('/senders'),
           api.get('/templates'),
-          api.get('/documents')
+          api.get('/documents'),
+          api.get('/folders')
         ]);
 
         if (compRes.data.success && compRes.data.data) {
@@ -105,6 +107,7 @@ export default function App() {
         if (senRes.data.success) setSenders(senRes.data.data);
         if (tplRes.data.success) setTemplates(tplRes.data.data);
         if (docRes.data.success) setSignedDocuments(docRes.data.data);
+        if (foldRes.data.success) setFolders(foldRes.data.data);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -639,7 +642,7 @@ export default function App() {
       )}
 
       {currentTab === 'explorer' && (
-        <FileExplorer templates={templates} signedDocuments={signedDocuments} />
+        <FileExplorer templates={templates} signedDocuments={signedDocuments} folders={folders} />
       )}
 
       {/* RENDER EMPLOYEES TAB */}

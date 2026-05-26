@@ -34,55 +34,22 @@ export interface FileNode {
 interface FileExplorerProps {
   templates: any[];
   signedDocuments: any[];
+  folders: any[];
 }
 
-export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) {
-  // Estado inicial simulando directorios del servidor
-  const [nodes, setNodes] = useState<FileNode[]>(() => {
-    const baseNodes: FileNode[] = [
-      // Folders
-      { id: 'fol_rrhh', name: 'RRHH', type: 'folder', path: 'RRHH', createdAt: '2026-05-01' },
-      { id: 'fol_rrhh_emp', name: 'empleados', type: 'folder', path: 'RRHH/empleados', createdAt: '2026-05-01' },
-      { id: 'fol_calidad', name: 'CALIDAD', type: 'folder', path: 'CALIDAD', createdAt: '2026-05-02' },
-      { id: 'fol_calidad_aud', name: 'AUDITORIAS', type: 'folder', path: 'CALIDAD/AUDITORIAS', createdAt: '2026-05-02' },
-      { id: 'fol_soport', name: 'SOPORTE', type: 'folder', path: 'SOPORTE', createdAt: '2026-05-03' },
-      { id: 'fol_soport_mant', name: 'mantenimiento', type: 'folder', path: 'SOPORTE/mantenimiento', createdAt: '2026-05-03' },
+export function FileExplorer({ templates, signedDocuments, folders }: FileExplorerProps) {
+  // Estado de los nodos
+  const [nodes, setNodes] = useState<FileNode[]>([]);
 
-      // Files (Templates & Signed Documents)
-      { 
-        id: 'fil_contrato_js', 
-        name: 'contrato_juanstiven.pdf', 
-        type: 'file', 
-        fileType: 'document', 
-        path: 'RRHH/empleados/contrato_juanstiven.pdf', 
-        size: '1.2 MB', 
-        createdAt: '2026-05-26 14:10',
-        author: 'Juan Stiven',
-        content: 'Contrato de prestación de servicios de desarrollo de software.'
-      },
-      { 
-        id: 'fil_ficha_ing', 
-        name: 'ficha_ingreso.pdf', 
-        type: 'file', 
-        fileType: 'document', 
-        path: 'RRHH/empleados/ficha_ingreso.pdf', 
-        size: '850 KB', 
-        createdAt: '2026-05-24 09:15',
-        author: 'Laura Camila',
-        content: 'Ficha médica e ingreso oficial del personal de enfermería.'
-      },
-      { 
-        id: 'fil_aut_iso', 
-        name: 'AUT_ISO.pdf', 
-        type: 'file', 
-        fileType: 'document', 
-        path: 'CALIDAD/AUDITORIAS/AUT_ISO.pdf', 
-        size: '2.4 MB', 
-        createdAt: '2026-05-25 16:30',
-        author: 'Dra. María Castro',
-        content: 'Auditoría interna de calidad de procesos y atención clínica.'
-      }
-    ];
+  React.useEffect(() => {
+    // Map backend folders to FileNode format
+    const baseNodes: FileNode[] = folders.map(f => ({
+      id: f.id,
+      name: f.name,
+      type: 'folder',
+      path: f.path,
+      createdAt: f.createdAt
+    }));
 
     // Integrar plantillas pasadas por props de forma dinámica
     templates.forEach(t => {
@@ -123,9 +90,12 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
 
     // Integrar documentos firmados pasados por props
     signedDocuments.forEach((doc) => {
-      const folderPath = 'RRHH/empleados';
-      const fileName = `${doc.templateName.replace(/\s+/g, '_')}_${doc.filledBy.replace(/\s+/g, '')}.pdf`;
-      const filePath = `${folderPath}/${fileName}`;
+      // Usar filePath físico de la BD o una ruta inferida si no tiene
+      const docTemplateName = doc.templateName || (doc.template ? doc.template.name : 'Documento');
+      const docFilledByName = doc.filledBy?.name || doc.filledBy || 'Empleado';
+      
+      const filePath = doc.filePath || `RRHH/empleados/${docTemplateName.replace(/\s+/g, '_')}_${docFilledByName.replace(/\s+/g, '')}.pdf`;
+      const fileName = filePath.split('/').pop() || filePath;
 
       baseNodes.push({
         id: `fil_doc_${doc.id}`,
@@ -134,14 +104,14 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
         fileType: 'document',
         path: filePath,
         size: '1.1 MB',
-        createdAt: doc.date,
-        author: doc.filledBy,
-        content: `Documento firmado bajo conformidad de la plantilla: ${doc.templateName}. Estado sinc: ${doc.syncStatus}`
+        createdAt: doc.date || doc.createdAt,
+        author: docFilledByName,
+        content: `Documento firmado. Estado sinc: ${doc.syncStatus}`
       });
     });
 
-    return baseNodes;
-  });
+    setNodes(baseNodes);
+  }, [templates, signedDocuments, folders]);
 
   // UI States
   const [selectedPath, setSelectedPath] = useState<string>('Raíz');
@@ -195,31 +165,32 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
   };
 
   // Crear Carpeta
-  const handleCreateFolder = () => {
+  const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
-    const parentPath = creatingInFolder?.path || '';
-    const newPath = parentPath 
-      ? `${parentPath}/${newFolderName.trim()}`
-      : newFolderName.trim();
+    const parentPath = creatingInFolder?.path && creatingInFolder.path !== 'Raíz' ? creatingInFolder.path : null;
+    const name = newFolderName.trim();
 
-    // Validar duplicado
-    if (nodes.some(n => n.path.toLowerCase() === newPath.toLowerCase())) {
-      alert('Ya existe una carpeta o archivo con ese nombre en esta ruta.');
-      return;
+    try {
+      const { default: api } = await import('../../utils/api');
+      const response = await api.post('/folders', { name, parentPath });
+
+      if (response.data.success) {
+        const f = response.data.data;
+        const newNode: FileNode = {
+          id: f.id,
+          name: f.name,
+          type: 'folder',
+          path: f.path,
+          createdAt: f.createdAt
+        };
+        setNodes(prev => [...prev, newNode]);
+        setNewFolderName('');
+        setCreatingInFolder(null);
+        setSelectedPath(f.path);
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error creando carpeta');
     }
-
-    const newNode: FileNode = {
-      id: `fol_${Math.random().toString(36).substr(2, 9)}`,
-      name: newFolderName.trim(),
-      type: 'folder',
-      path: newPath,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-
-    setNodes(prev => [...prev, newNode]);
-    setNewFolderName('');
-    setCreatingInFolder(null);
-    setSelectedPath(newPath);
   };
 
   // Crear Archivo
@@ -262,19 +233,31 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
   };
 
   // Eliminar Carpeta o Archivo
-  const handleDeleteNode = (node: FileNode) => {
+  const handleDeleteNode = async (node: FileNode) => {
     const confirmation = window.confirm(`¿Estás seguro de que deseas eliminar "${node.name}"? ${node.type === 'folder' ? 'Esto eliminará recursivamente todo su contenido.' : ''}`);
     if (!confirmation) return;
 
-    if (node.type === 'folder') {
-      // Eliminar carpeta y todos sus descendientes
-      setNodes(prev => prev.filter(n => n.path !== node.path && !n.path.startsWith(node.path + '/')));
-    } else {
-      setNodes(prev => prev.filter(n => n.id !== node.id));
-    }
+    try {
+      const { default: api } = await import('../../utils/api');
+      
+      if (node.type === 'folder') {
+        await api.delete(`/folders/${node.id}`);
+        // Eliminar carpeta y todos sus descendientes
+        setNodes(prev => prev.filter(n => n.path !== node.path && !n.path.startsWith(node.path + '/')));
+      } else {
+        if (node.fileType === 'document' && node.id.startsWith('fil_doc_')) {
+          await api.delete(`/documents/${node.id.replace('fil_doc_', '')}`);
+        } else if (node.fileType === 'template' && node.id.startsWith('fil_tpl_')) {
+          await api.delete(`/templates/${node.id.replace('fil_tpl_', '')}`);
+        }
+        setNodes(prev => prev.filter(n => n.id !== node.id));
+      }
 
-    if (selectedPath === node.path || selectedPath.startsWith(node.path + '/')) {
-      setSelectedPath('Raíz');
+      if (selectedPath === node.path || selectedPath.startsWith(node.path + '/')) {
+        setSelectedPath('Raíz');
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error eliminando el elemento');
     }
   };
 
@@ -285,7 +268,7 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
   };
 
   // Guardar Renombrado
-  const saveRename = (node: FileNode) => {
+  const saveRename = async (node: FileNode) => {
     if (!newNameText.trim() || newNameText.trim() === node.name) {
       setRenamingNodeId(null);
       return;
@@ -298,19 +281,29 @@ export function FileExplorer({ templates, signedDocuments }: FileExplorerProps) 
       ? `${parentPath}/${newNameText.trim()}`
       : newNameText.trim();
 
-    // Actualizar nodo actual y todos los descendientes en caso de que sea carpeta
-    setNodes(prev => prev.map(n => {
-      if (n.id === node.id) {
-        return { ...n, name: newNameText.trim(), path: newPath };
-      }
-      if (node.type === 'folder' && n.path.startsWith(node.path + '/')) {
-        const remainingPart = n.path.substring(node.path.length);
-        return { ...n, path: newPath + remainingPart };
-      }
-      return n;
-    }));
+    try {
+      const { default: api } = await import('../../utils/api');
 
-    setRenamingNodeId(null);
+      if (node.type === 'folder') {
+        await api.patch(`/folders/${node.id}/rename`, { newName: newNameText.trim() });
+      }
+
+      // Actualizar nodo actual y todos los descendientes en caso de que sea carpeta
+      setNodes(prev => prev.map(n => {
+        if (n.id === node.id) {
+          return { ...n, name: newNameText.trim(), path: newPath };
+        }
+        if (node.type === 'folder' && n.path.startsWith(node.path + '/')) {
+          const remainingPart = n.path.substring(node.path.length);
+          return { ...n, path: newPath + remainingPart };
+        }
+        return n;
+      }));
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error al renombrar el elemento');
+    } finally {
+      setRenamingNodeId(null);
+    }
     if (selectedPath === node.path) {
       setSelectedPath(newPath);
     }
