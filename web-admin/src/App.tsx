@@ -277,7 +277,7 @@ export default function App() {
                     {signedDocuments.map((doc) => (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-6 py-4 font-medium text-foreground">{doc.templateName}</td>
-                        <td className="px-6 py-4 text-muted-foreground">{doc.filledBy}</td>
+                        <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy}</td>
                         <td className="px-6 py-4 text-muted-foreground">{doc.date}</td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-0.5 rounded-full font-medium ${
@@ -674,7 +674,7 @@ export default function App() {
                 {employees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-4 font-medium text-foreground">{emp.name}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.doc}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{emp.document || emp.doc}</td>
                     <td className="px-6 py-4 text-muted-foreground">{emp.role}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full font-medium ${
@@ -760,7 +760,7 @@ export default function App() {
                 {signedDocuments.map((doc) => (
                   <tr key={doc.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-4 font-medium text-foreground">{doc.templateName}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{doc.filledBy}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy}</td>
                     <td className="px-6 py-4 text-muted-foreground">{doc.date}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full font-medium ${
