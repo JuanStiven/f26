@@ -11,6 +11,7 @@ import {
   Camera,
   ClipboardList
 } from 'lucide-react';
+import api from '../../utils/api';
 
 interface LoginProps {
   onLogin: (role: string) => void;
@@ -25,21 +26,23 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    // Simular llamada a API
-    setTimeout(() => {
-      if (email === 'admin@esenorte3.gov.co' && password === 'admin123') {
-        setIsLoading(false);
+    try {
+      const response = await api.post('/auth/login/admin', { email, password });
+      if (response.data.success) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
         onLogin('admin');
-      } else {
-        setError('Credenciales incorrectas. Intenta con admin@esenorte3.gov.co y admin123');
-        setIsLoading(false);
       }
-    }, 1000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error de conexión. Intenta de nuevo.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -47,6 +47,13 @@ export default function App() {
   });
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  useEffect(() => {
     const root = window.document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
@@ -60,7 +67,7 @@ export default function App() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  // Estado ficticio para simular base de datos
+  // Estado de base de datos conectado al API
   const [companySettings, setCompanySettings] = useState({
     name: 'ESE Norte 3',
     nit: '800.123.456-7',
@@ -71,51 +78,40 @@ export default function App() {
     logo: null as string | null
   });
 
-  const [employees] = useState([
-    { id: '1', name: 'Carlos Mario Torres', doc: '1098765432', role: 'Operario de Campo', status: 'Activo' },
-    { id: '2', name: 'Laura Camila Ortiz', doc: '1087654321', role: 'Enfermera Jefa', status: 'Activo' },
-    { id: '3', name: 'Andrés Felipe Restrepo', doc: '1076543210', role: 'Técnico Domiciliario', status: 'Inactivo' },
-  ]);
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [senders, setSenders] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [signedDocuments, setSignedDocuments] = useState<any[]>([]);
 
-  const [senders] = useState([
-    { id: '1', name: 'EPS Sanitas', nit: '800.000.111-2', phone: '018000919100' },
-    { id: '2', name: 'Nueva EPS', nit: '900.156.244-1', phone: '018000954400' },
-  ]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
-  const [templates, setTemplates] = useState<Template[]>([
-    {
-      id: 't1',
-      name: 'Acta de Entrega de Insumos Médicos',
-      description: 'Constancia de insumos entregados en puestos de salud rurales.',
-      createdAt: '2026-05-15',
-      storagePath: 'CALIDAD/AUDITORIAS',
-      fields: [
-        { id: 'f1', type: 'text', label: 'Puesto de Salud Destino', required: true },
-        { id: 'f2', type: 'date', label: 'Fecha de Entrega', required: true },
-        { id: 'f3', type: 'table', label: 'Detalle de Insumos', required: true, columns: ['Elemento', 'Cantidad', 'Lote'] },
-        { id: 'f4', type: 'photo', label: 'Foto del Recibido (Rostro Opcional)', required: false },
-        { id: 'f5', type: 'signature', label: 'Firma Responsable', required: true }
-      ]
-    },
-    {
-      id: 't2',
-      name: 'Registro de Mantenimiento de Equipos',
-      description: 'Reporte técnico del estado de equipos médicos en campo.',
-      createdAt: '2026-05-20',
-      storagePath: 'SOPORTE/mantenimiento',
-      fields: [
-        { id: 'm1', type: 'text', label: 'Identificador del Equipo', required: true },
-        { id: 'm2', type: 'text', label: 'Observaciones Técnicas', required: false },
-        { id: 'm3', type: 'signature', label: 'Firma Técnico', required: true }
-      ]
-    }
-  ]);
+    const fetchData = async () => {
+      try {
+        const { default: api } = await import('./utils/api');
+        
+        const [compRes, empRes, senRes, tplRes, docRes] = await Promise.all([
+          api.get('/company'),
+          api.get('/employees'),
+          api.get('/senders'),
+          api.get('/templates'),
+          api.get('/documents')
+        ]);
 
-  const [signedDocuments] = useState([
-    { id: 'doc1', templateName: 'Acta de Entrega de Insumos Médicos', filledBy: 'Carlos Mario Torres', date: '2026-05-26 10:14 AM', syncStatus: 'Sincronizado' },
-    { id: 'doc2', templateName: 'Acta de Entrega de Insumos Médicos', filledBy: 'Laura Camila Ortiz', date: '2026-05-26 09:30 AM', syncStatus: 'Sincronizado' },
-    { id: 'doc3', templateName: 'Registro de Mantenimiento de Equipos', filledBy: 'Carlos Mario Torres', date: '2026-05-25 04:45 PM', syncStatus: 'Offline Sync' },
-  ]);
+        if (compRes.data.success && compRes.data.data) {
+          setCompanySettings(prev => ({ ...prev, ...compRes.data.data }));
+        }
+        if (empRes.data.success) setEmployees(empRes.data.data);
+        if (senRes.data.success) setSenders(senRes.data.data);
+        if (tplRes.data.success) setTemplates(tplRes.data.data);
+        if (docRes.data.success) setSignedDocuments(docRes.data.data);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated]);
 
   // Creador de Plantillas (DocBuilder State)
   const [newTemplate, setNewTemplate] = useState<Partial<Template>>({
@@ -172,6 +168,12 @@ export default function App() {
     alert('Plantilla guardada con éxito.');
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setIsAuthenticated(false);
+  };
+
   if (!isAuthenticated) {
     return (
       <LoginPage 
@@ -188,7 +190,7 @@ export default function App() {
       setCurrentTab={setCurrentTab}
       theme={theme}
       toggleTheme={toggleTheme}
-      onLogout={() => setIsAuthenticated(false)}
+      onLogout={handleLogout}
     >
       
       {/* RENDER DASHBOARD TAB */}
