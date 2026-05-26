@@ -252,6 +252,27 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
                 </>
               )}
             </button>
+
+            {/* Credenciales de Demo */}
+            <div className="p-3 rounded-lg border border-border bg-muted/40 text-center space-y-1 select-none animate-in fade-in duration-300">
+              <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Credenciales de Demo</p>
+              <div className="flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 text-[11px] text-foreground font-mono">
+                <div>
+                  <span className="text-muted-foreground">User:</span>{' '}
+                  <strong className="text-foreground hover:text-primary transition-colors cursor-pointer select-all" onClick={() => setEmail('admin@esenorte3.gov.co')}>
+                    admin@esenorte3.gov.co
+                  </strong>
+                </div>
+                <span className="hidden sm:inline text-muted-foreground/30">|</span>
+                <div>
+                  <span className="text-muted-foreground">Pass:</span>{' '}
+                  <strong className="text-foreground hover:text-primary transition-colors cursor-pointer select-all" onClick={() => setPassword('admin123')}>
+                    admin123
+                  </strong>
+                </div>
+              </div>
+              <p className="text-[9px] text-muted-foreground/80 italic font-sans">(Haz clic en ellas para autorellenar)</p>
+            </div>
           </form>
 
         </div>
