@@ -16,7 +16,8 @@ import {
   FileDown,
   Building,
   Save,
-  Grid
+  Grid,
+  X
 } from 'lucide-react';
 
 interface TemplateField {
@@ -129,6 +130,18 @@ export default function App() {
   const [fieldRequired, setFieldRequired] = useState(true);
   const [tableCols, setTableCols] = useState('');
 
+  // Empleados Modal State
+  const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState<any>(null);
+  const [newEmployee, setNewEmployee] = useState({
+    id: undefined as string | undefined,
+    name: '',
+    document: '',
+    pin: '',
+    position: '',
+    role: 'EMPLOYEE'
+  });
+
   const addFieldToTemplate = () => {
     if (!fieldLabel.trim()) return;
 
@@ -174,6 +187,47 @@ export default function App() {
       }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error guardando plantilla');
+    }
+  };
+
+  const saveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmployee.name || !newEmployee.document) return;
+    try {
+      const { default: api } = await import('./utils/api');
+      if (newEmployee.id) {
+        // Edit mode
+        const response = await api.put(`/employees/${newEmployee.id}`, newEmployee);
+        if (response.data.success) {
+          setEmployees(prev => prev.map(emp => emp.id === newEmployee.id ? response.data.data : emp));
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+          setIsEmployeeModalOpen(false);
+        }
+      } else {
+        // Create mode
+        if (!newEmployee.pin) return;
+        const response = await api.post('/employees', newEmployee);
+        if (response.data.success) {
+          setEmployees(prev => [...prev, response.data.data]);
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+          setIsEmployeeModalOpen(false);
+        }
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error guardando empleado');
+    }
+  };
+
+  const confirmDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+    try {
+      const { default: api } = await import('./utils/api');
+      await api.delete(`/employees/${employeeToDelete.id}`);
+      setEmployees(prev => prev.filter(emp => emp.id !== employeeToDelete.id));
+      setEmployeeToDelete(null);
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error eliminando empleado');
+      setEmployeeToDelete(null);
     }
   };
 
@@ -653,11 +707,88 @@ export default function App() {
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Gestión de Empleados</h1>
               <p className="text-muted-foreground">Administra los usuarios con rol de empleado que acceden desde las tablets.</p>
             </div>
-            <button className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5">
+            <button 
+              onClick={() => {
+                setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+                setIsEmployeeModalOpen(true);
+              }}
+              className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
+            >
               <Plus className="h-4 w-4" />
               Nuevo Empleado
             </button>
           </div>
+
+          {isEmployeeModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-card w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
+                  <h3 className="font-semibold text-foreground">Crear Nuevo Empleado</h3>
+                  <button onClick={() => setIsEmployeeModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <form onSubmit={saveEmployee}>
+                  <div className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Nombre Completo</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newEmployee.name}
+                        onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Cédula / Documento</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newEmployee.document}
+                        onChange={(e) => setNewEmployee({...newEmployee, document: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Contraseña (PIN) {newEmployee.id ? '(Dejar vacío para no cambiar)' : ''}</label>
+                      <input 
+                        type="password" 
+                        required={!newEmployee.id}
+                        value={newEmployee.pin}
+                        onChange={(e) => setNewEmployee({...newEmployee, pin: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Cargo</label>
+                      <input 
+                        type="text" 
+                        value={newEmployee.position}
+                        onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="px-6 py-4 border-t border-border bg-muted/10 flex justify-end gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsEmployeeModalOpen(false)}
+                      className="px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted rounded-lg"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="submit"
+                      className="px-4 py-2 text-xs font-medium bg-primary text-white hover:bg-primary/95 rounded-lg"
+                    >
+                      Guardar Empleado
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
@@ -675,7 +806,7 @@ export default function App() {
                   <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-6 py-4 font-medium text-foreground">{emp.name}</td>
                     <td className="px-6 py-4 text-muted-foreground">{emp.document || emp.doc}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.role}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{emp.position || emp.role}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded-full font-medium ${
                         emp.status === 'Activo' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
@@ -684,14 +815,59 @@ export default function App() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button className="p-1 rounded hover:bg-muted text-primary mr-1"><Edit2 className="h-4 w-4" /></button>
-                      <button className="p-1 rounded hover:bg-muted text-destructive"><Trash2 className="h-4 w-4" /></button>
+                      <button 
+                        onClick={() => {
+                          setNewEmployee({
+                            id: emp.id,
+                            name: emp.name,
+                            document: emp.document || emp.doc || '',
+                            pin: '',
+                            position: emp.position || '',
+                            role: emp.role || 'EMPLOYEE'
+                          });
+                          setIsEmployeeModalOpen(true);
+                        }}
+                        className="p-1 rounded hover:bg-muted text-primary mr-1"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button 
+                        onClick={() => setEmployeeToDelete(emp)}
+                        className="p-1 rounded hover:bg-muted text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {employeeToDelete && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-card w-full max-w-sm rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 p-6">
+                <h3 className="font-semibold text-lg text-foreground mb-2">Eliminar Empleado</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  ¿Estás seguro de que deseas eliminar a <strong>{employeeToDelete.name}</strong>? Esta acción no se puede deshacer.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button 
+                    onClick={() => setEmployeeToDelete(null)}
+                    className="px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={confirmDeleteEmployee}
+                    className="px-4 py-2 text-xs font-medium bg-destructive text-white hover:bg-destructive/90 rounded-lg"
+                  >
+                    Sí, Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

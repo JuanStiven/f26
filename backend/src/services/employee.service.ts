@@ -105,9 +105,17 @@ export async function updateEmployee(
 }
 
 export async function deleteEmployee(id: string) {
-  const exists = await prisma.user.findUnique({ where: { id } });
+  const exists = await prisma.user.findUnique({ 
+    where: { id },
+    include: { _count: { select: { signedDocuments: true } } }
+  });
+  
   if (!exists) {
     throw { status: 404, message: 'Empleado no encontrado.' };
+  }
+
+  if (exists._count.signedDocuments > 0) {
+    throw { status: 400, message: 'No se puede eliminar el empleado porque tiene documentos firmados asociados.' };
   }
 
   return prisma.user.delete({ where: { id } });
