@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MainLayout } from './components/layout/main-layout';
 import { LoginPage } from './components/auth/login';
+import { FileExplorer } from './components/explorer/file-explorer';
 import { 
   FileText, 
   Users, 
@@ -33,6 +34,7 @@ interface Template {
   description: string;
   fields: TemplateField[];
   createdAt: string;
+  storagePath?: string;
 }
 
 export default function App() {
@@ -86,6 +88,7 @@ export default function App() {
       name: 'Acta de Entrega de Insumos Médicos',
       description: 'Constancia de insumos entregados en puestos de salud rurales.',
       createdAt: '2026-05-15',
+      storagePath: 'CALIDAD/AUDITORIAS',
       fields: [
         { id: 'f1', type: 'text', label: 'Puesto de Salud Destino', required: true },
         { id: 'f2', type: 'date', label: 'Fecha de Entrega', required: true },
@@ -99,6 +102,7 @@ export default function App() {
       name: 'Registro de Mantenimiento de Equipos',
       description: 'Reporte técnico del estado de equipos médicos en campo.',
       createdAt: '2026-05-20',
+      storagePath: 'SOPORTE/mantenimiento',
       fields: [
         { id: 'm1', type: 'text', label: 'Identificador del Equipo', required: true },
         { id: 'm2', type: 'text', label: 'Observaciones Técnicas', required: false },
@@ -117,6 +121,7 @@ export default function App() {
   const [newTemplate, setNewTemplate] = useState<Partial<Template>>({
     name: '',
     description: '',
+    storagePath: '',
     fields: []
   });
 
@@ -159,10 +164,11 @@ export default function App() {
       name: newTemplate.name,
       description: newTemplate.description || '',
       fields: newTemplate.fields || [],
+      storagePath: newTemplate.storagePath || 'Raíz',
       createdAt: new Date().toISOString().split('T')[0]
     };
     setTemplates(prev => [...prev, template]);
-    setNewTemplate({ name: '', description: '', fields: [] });
+    setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
     alert('Plantilla guardada con éxito.');
   };
 
@@ -359,7 +365,7 @@ export default function App() {
             <div className="xl:col-span-3 bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
               <h3 className="font-semibold text-foreground border-b border-border pb-3">Detalles de la Plantilla</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Nombre de la Plantilla</label>
                   <input 
@@ -377,6 +383,16 @@ export default function App() {
                     placeholder="Escribe una breve descripción del documento..."
                     value={newTemplate.description || ''}
                     onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Ruta de Almacenamiento (Servidor)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej. RRHH/empleados o CALIDAD/AUDITORIAS"
+                    value={newTemplate.storagePath || ''}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, storagePath: e.target.value }))}
                     className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
                   />
                 </div>
@@ -587,10 +603,15 @@ export default function App() {
                   <div className="space-y-1">
                     <h4 className="text-xs font-bold text-foreground">{t.name}</h4>
                     <p className="text-[11px] text-muted-foreground line-clamp-2">{t.description}</p>
-                    <div className="pt-2 flex gap-2">
+                    <div className="pt-2 flex flex-wrap gap-2 items-center">
                       <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium">
                         {t.fields.length} campos
                       </span>
+                      {t.storagePath && (
+                        <span className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-full font-mono font-medium">
+                          📁 {t.storagePath}
+                        </span>
+                      )}
                       <span className="text-[10px] text-muted-foreground">Creado: {t.createdAt}</span>
                     </div>
                   </div>
@@ -607,6 +628,10 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {currentTab === 'explorer' && (
+        <FileExplorer templates={templates} signedDocuments={signedDocuments} />
       )}
 
       {/* RENDER EMPLOYEES TAB */}

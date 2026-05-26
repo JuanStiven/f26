@@ -7,7 +7,8 @@ import {
   HelpCircle, 
   ChevronLeft, 
   ChevronRight,
-  ClipboardList
+  ClipboardList,
+  FolderOpen
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -21,6 +22,7 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab }: 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'templates', label: 'DocBuilder (Plantillas)', icon: ClipboardList },
+    { id: 'explorer', label: 'Explorador de Archivos', icon: FolderOpen },
     { id: 'users', label: 'Gestión de Empleados', icon: Users },
     { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
     { id: 'documents', label: 'Documentos Diligenciados', icon: FileText },

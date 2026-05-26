@@ -1,0 +1,86 @@
+# Plan de Implementación: Sistema de Gestión de Documentos Operativos (ESE Norte 3)
+
+## Arquitectura del Proyecto
+
+Para garantizar orden, escalabilidad y las mejores prácticas, el proyecto está estructurado en una arquitectura monorepo modular dividida en tres servicios principales:
+
+### 1. `backend/` (API REST - Node.js + Express + TypeScript)
+El cerebro del sistema, dockerizado, responsable de la lógica de negocio y la persistencia de datos físicos e históricos.
+*   **Arquitectura de Capas (Modular):**
+    *   `routes/`: Definición de endpoints y rutas de la API.
+    *   `controllers/`: Manejo de peticiones y respuestas HTTP.
+    *   `services/`: Lógica de negocio (procesamiento de firmas y generación de PDFs).
+    *   `repositories/`: Interacción directa con la base de datos (PostgreSQL/MySQL).
+    *   `models/` / `prisma/schema.prisma`: Modelos para almacenar jerarquías de archivos, plantillas y documentos diligenciados.
+    *   `middlewares/`: Autenticación basada en JWT, verificación de roles (RBAC) y manejo global de errores.
+
+### 2. `web-admin/` (Panel Administrativo Web - React + Vite + TypeScript)
+Panel de control de alta fidelidad estética y visualmente premium (inspirado en la UI de Raíces/ispgo-frontend) diseñado para el control administrativo de la entidad.
+*   **Roles permitidos:** Administrador (`admin`).
+*   **Funcionalidades Clave:**
+    *   **DocBuilder (Creador de Plantillas):** Interfaz visual interactiva que permite definir esquemas dinámicos (texto, número, fecha, fotos, firmas y tablas) y especificar una **Ruta de Almacenamiento (Servidor)** como `CALIDAD/AUDITORIAS` o `RRHH/empleados`.
+    *   **Explorador de Archivos (File Explorer):** Componente jerárquico integrado en el Sidebar que permite:
+        *   Navegar por el árbol de directorios físicos en el servidor.
+        *   Crear, renombrar, eliminar carpetas y archivos.
+        *   Mover archivos y modificar sus rutas de anidamiento.
+        *   Previsualizar plantillas JSON y documentos PDF firmados en alta fidelidad.
+        *   Buscar globalmente y descargar archivos.
+    *   **Gestión de Empleados:** Control de acceso (Cédula + PIN) para el personal de campo.
+    *   **Configuración Institucional:** Personalización de datos (NIT, Gerente, Dirección y Logotipo de ESE Norte 3).
+
+### 3. `mobile-app/` (Aplicación Móvil - React Native + Expo SDK 54)
+Herramienta de captura de datos de campo para tablets y smartphones de operarios y enfermeros.
+*   **Alineación tecnológica:** Expo SDK 54 (`expo: ~54.0.34`), `react 19.1.0` y `react-native 0.81.5` para garantizar compatibilidad total con dispositivos locales.
+*   **Funcionalidades Clave:**
+    *   **Autenticación Local:** Acceso institucional con Cédula + PIN de seguridad, incluyendo un panel de acceso demo para testing rápido.
+    *   **Diligenciamiento de Formularios Dinámicos:** Genera los campos en base a las plantillas JSON recuperadas del servidor.
+    *   **Consentimiento y Biometría:** Alerta obligatoria de consentimiento y captura de fotografía para validez probatoria.
+    *   **Firma Digital Biométrica:** Lienzo interactivo para la recolección de firmas táctiles.
+    *   **Modo Offline-First:** Almacenamiento local SQLite/AsyncStorage que permite diligenciar documentos sin conexión de red y sincronizarlos automáticamente al servidor cuando se restablece la conexión.
+
+## Jerarquía de Archivos en el Servidor (Ejemplo)
+
+El almacenamiento en disco y base de datos de los templates y documentos se estructura de la siguiente manera:
+
+```mermaid
+graph TD
+    Raiz["Raíz (Servidor)"] --> RRHH["📁 RRHH/"]
+    Raiz --> CALIDAD["📁 CALIDAD/"]
+    Raiz --> SOPORTE["📁 SOPORTE/"]
+    
+    RRHH --> Empleados["📁 empleados/"]
+    Empleados --> Contrato["📄 contrato_juanstiven.pdf"]
+    Empleados --> Ficha["📄 ficha_ingreso.pdf"]
+    
+    CALIDAD --> Aud["📁 AUDITORIAS/"]
+    Aud --> AutISO["📄 AUT_ISO.pdf"]
+    Aud --> Planilla["📄 Planilla_Control.json (Template)"]
+    
+    SOPORTE --> Mant["📁 mantenimiento/"]
+    Mant --> RegCalib["📄 Registro_Calibracion.json (Template)"]
+```
+
+## Flujo de Sincronización y Validación de Rutas
+
+```mermaid
+sequenceDiagram
+    participant App as App Móvil (Expo)
+    participant API as Backend (Express)
+    participant DB as Base de Datos (Prisma/DB)
+    participant Disk as Servidor de Archivos
+    
+    App->>API: 1. Petición de Sincronización de Documento Firmado
+    API->>DB: 2. Consultar ruta de almacenamiento de la Plantilla asociada
+    DB-->>API: Retorna "CALIDAD/AUDITORIAS"
+    API->>API: 3. Verificar si el directorio existe físicamente
+    Note over API: Si no existe, se crea recursivamente
+    API->>Disk: 4. Guardar archivo final diligenciado (PDF)
+    API->>DB: 5. Guardar registro en BD de documento sincronizado
+    API-->>App: 6. Confirmación de Sincronización Completada
+```
+
+## Mejores Prácticas (Best Practices)
+1.  **Tipado Estricto:** TypeScript estricto en el frontend web, móvil y backend para prevenir errores en tiempo de ejecución.
+2.  **Linting y Formateo:** ESLint + TypeScript-ESLint para garantizar consistencia estilística y limpieza de código.
+3.  **Seguridad de Datos:** Tokens JWT con expiración corta, hashing de PINs de empleados y HTTPS obligatorio para la transmisión de firmas y fotos.
+4.  **Optimización Móvil:** Compresión de imágenes de cámara capturadas en campo y almacenamiento diferido de firmas biométricas.
