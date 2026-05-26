@@ -1,13 +1,126 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// ======================================================
+// ESE Norte 3 - Prisma Schema
+// Sistema de Gestión Documental
+// ======================================================
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ─── Roles del Sistema ───────────────────────────────
+enum Role {
+  ADMIN
+  EMPLOYEE
+}
+
+// ─── Estado de sincronización ────────────────────────
+enum SyncStatus {
+  SYNCED
+  PENDING
+  OFFLINE
+}
+
+// ─── Usuarios (Admin + Empleados) ────────────────────
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  document  String   @unique // Cédula
+  password  String   // Hash bcrypt (admin) o PIN hasheado (empleados)
+  role      Role     @default(EMPLOYEE)
+  status    String   @default("Activo") // Activo, Inactivo
+  position  String?  // Cargo: Operario, Enfermera, etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  signedDocuments SignedDocument[]
+
+  @@map("users")
+}
+
+// ─── Configuración de Empresa ────────────────────────
+model CompanySettings {
+  id      String  @id @default(uuid())
+  name    String  @default("ESE Norte 3")
+  nit     String  @default("800.123.456-7")
+  address String  @default("Calle 10 # 5-20, Sede Principal")
+  phone   String  @default("320 123 4567")
+  manager String  @default("Dra. María Helena Castro")
+  email   String  @default("contacto@esenorte3.gov.co")
+  logoUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// ─── Remitentes (EPS, Entidades) ─────────────────────
+model Sender {
+  id    String @id @default(uuid())
+  name  String
+  nit   String
+  phone String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("senders")
+}
+
+// ─── Plantillas Documentales ─────────────────────────
+model Template {
+  id          String @id @default(uuid())
+  name        String
+  description String @default("")
+  storagePath String @default("") // Ruta en el servidor: "CALIDAD/AUDITORIAS"
+  fields      Json   // Array de campos JSON [{id, type, label, required, columns?}]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  signedDocuments SignedDocument[]
+
+  @@map("templates")
+}
+
+// ─── Documentos Diligenciados (Firmados) ─────────────
+model SignedDocument {
+  id         String     @id @default(uuid())
+  data       Json       // Datos llenados en el formulario dinámico
+  photoUrl   String?    // Foto del consentimiento
+  signatureUrl String?  // Imagen de la firma digital
+  syncStatus SyncStatus @default(PENDING)
+  filePath   String?    // Ruta física del archivo generado en el servidor
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  filledById String
+  filledBy   User @relation(fields: [filledById], references: [id], onDelete: Cascade)
+
+  @@map("signed_documents")
+}
+
+// ─── Carpetas del Explorador de Archivos ─────────────
+model Folder {
+  id       String @id @default(uuid())
+  name     String
+  path     String @unique // Ruta completa: "RRHH/empleados"
+  parentPath String? // Ruta padre: "RRHH" (null para carpetas raíz)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("folders")
 }
