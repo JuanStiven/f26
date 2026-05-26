@@ -139,6 +139,7 @@ export default function App() {
     document: '',
     pin: '',
     position: '',
+    status: 'Activo',
     role: 'EMPLOYEE'
   });
 
@@ -200,7 +201,7 @@ export default function App() {
         const response = await api.put(`/employees/${newEmployee.id}`, newEmployee);
         if (response.data.success) {
           setEmployees(prev => prev.map(emp => emp.id === newEmployee.id ? response.data.data : emp));
-          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
           setIsEmployeeModalOpen(false);
         }
       } else {
@@ -209,7 +210,7 @@ export default function App() {
         const response = await api.post('/employees', newEmployee);
         if (response.data.success) {
           setEmployees(prev => [...prev, response.data.data]);
-          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
           setIsEmployeeModalOpen(false);
         }
       }
@@ -709,7 +710,7 @@ export default function App() {
             </div>
             <button 
               onClick={() => {
-                setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', role: 'EMPLOYEE' });
+                setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
                 setIsEmployeeModalOpen(true);
               }}
               className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
@@ -769,6 +770,19 @@ export default function App() {
                         className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                       />
                     </div>
+                    {newEmployee.id && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                        <select 
+                          value={newEmployee.status}
+                          onChange={(e) => setNewEmployee({...newEmployee, status: e.target.value})}
+                          className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        >
+                          <option value="Activo">Activo</option>
+                          <option value="Inactivo">Inactivo</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div className="px-6 py-4 border-t border-border bg-muted/10 flex justify-end gap-3">
                     <button 
@@ -823,6 +837,7 @@ export default function App() {
                             document: emp.document || emp.doc || '',
                             pin: '',
                             position: emp.position || '',
+                            status: emp.status || 'Activo',
                             role: emp.role || 'EMPLOYEE'
                           });
                           setIsEmployeeModalOpen(true);
@@ -860,7 +875,7 @@ export default function App() {
                   </button>
                   <button 
                     onClick={confirmDeleteEmployee}
-                    className="px-4 py-2 text-xs font-medium bg-destructive text-white hover:bg-destructive/90 rounded-lg"
+                    className="px-4 py-2 text-xs font-medium bg-red-600 text-white hover:bg-red-700 rounded-lg"
                   >
                     Sí, Eliminar
                   </button>
