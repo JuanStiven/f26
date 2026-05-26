@@ -1,0 +1,40 @@
+### Colores Principales (Identidad)
+
+* **Azul Principal (Texto "ESE" y detalles):** `#004F9F`
+> Un azul institucional fuerte, utilizado en las letras principales y en el contorno/relleno del corazón.
+
+
+* **Gris Oscuro (Texto "NORTE 3" y eslogan):** `#6B7C85`
+> El tono gris neutro con un ligero matiz azulado usado para el nombre de la entidad y la frase "Servicio humanizado y de calidad."
+
+
+* **Azul Eléctrico (Eslogan manuscrito):** `#0D47A1`
+> El tono utilizado para la frase en tipografía manuscrita "Le ponemos Corazón".
+
+
+
+---
+
+### Colores del Isotipo (La Mano)
+
+El degradado y las transparencias de la mano combinan variaciones de los siguientes tonos:
+
+* **Azul Claro / Base de la mano:** `#5A92C4`
+* **Gris Claro / Desvanecido de los dedos:** `#BCC5CD`
+
+---
+
+### Consejos para desarrollo web (CSS)
+
+Si estás implementando esto en un archivo de estilos o utilizando utilidades como Tailwind CSS, puedes estructurarlos de la siguiente manera:
+
+```json
+{
+  "primary": "#004F9F",
+  "secondary": "#6B7C85",
+  "accent": "#0D47A1",
+  "light-blue": "#5A92C4",
+  "light-gray": "#BCC5CD"
+}
+
+```
