@@ -153,19 +153,25 @@ export default function App() {
     }));
   };
 
-  const saveTemplate = () => {
+  const saveTemplate = async () => {
     if (!newTemplate.name) return;
-    const template: Template = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newTemplate.name,
-      description: newTemplate.description || '',
-      fields: newTemplate.fields || [],
-      storagePath: newTemplate.storagePath || 'Raíz',
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setTemplates(prev => [...prev, template]);
-    setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
-    alert('Plantilla guardada con éxito.');
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.post('/templates', {
+        name: newTemplate.name,
+        description: newTemplate.description || '',
+        storagePath: newTemplate.storagePath || 'Raíz',
+        fields: newTemplate.fields || []
+      });
+
+      if (response.data.success) {
+        setTemplates(prev => [...prev, response.data.data]);
+        setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
+        alert('Plantilla guardada con éxito.');
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error guardando plantilla');
+    }
   };
 
   const handleLogout = () => {
@@ -872,7 +878,15 @@ export default function App() {
 
             <div className="border-t border-border pt-4 flex justify-end">
               <button 
-                onClick={() => alert('Configuración guardada exitosamente.')}
+                onClick={async () => {
+                  try {
+                    const { default: api } = await import('./utils/api');
+                    await api.put('/company', companySettings);
+                    alert('Configuración guardada exitosamente.');
+                  } catch (e: any) {
+                    alert('Error guardando configuración');
+                  }
+                }}
                 className="bg-primary text-white text-xs px-6 py-2.5 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
               >
                 <Save className="h-4 w-4" />
