@@ -12,6 +12,16 @@ export async function getAllDocuments() {
   });
 }
 
+export async function getDocumentsByUserId(userId: string) {
+  return prisma.signedDocument.findMany({
+    where: { filledById: userId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      template: { select: { name: true, description: true } }
+    },
+  });
+}
+
 export async function getDocumentById(id: string) {
   const doc = await prisma.signedDocument.findUnique({
     where: { id },

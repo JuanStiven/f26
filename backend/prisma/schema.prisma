@@ -38,7 +38,8 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  signedDocuments SignedDocument[]
+  signedDocuments   SignedDocument[]
+  assignedTemplates Template[]       @relation("TemplateAssignments")
 
   @@map("users")
 }
@@ -86,6 +87,7 @@ model Template {
 
   // Relaciones
   signedDocuments SignedDocument[]
+  assignedUsers   User[]           @relation("TemplateAssignments")
 
   @@map("templates")
 }

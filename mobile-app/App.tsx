@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { 
   StyleSheet, 
@@ -11,8 +11,14 @@ import {
   Platform, 
   ScrollView,
   SafeAreaView,
-  Alert
+  Alert,
+  Modal,
+  Image
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import SignatureScreen from 'react-native-signature-canvas';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors } from './src/theme/colors';
 
 // Datos de simulación para los empleados de la ESE Norte 3
@@ -25,6 +31,7 @@ const EMPLOYEES_DB = [
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userToken, setUserToken] = useState<string | null>(null);
   
   // Login Form States
   const [docNumber, setDocNumber] = useState('');
@@ -33,12 +40,72 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   
   // App Navigation States
-  const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'templates' | 'offline_docs'>('dashboard');
+  const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'templates' | 'offline_docs' | 'fill_form' | 'history' | 'view_document'>('dashboard');
   const [isOnline, setIsOnline] = useState(true);
 
   // Formulario Dinámico (Simulado para llenar en la tablet)
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
+  const [showDatePicker, setShowDatePicker] = useState<{ visible: boolean, fieldId: string | null }>({ visible: false, fieldId: null });
+  const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+  const [activeSignatureFieldId, setActiveSignatureFieldId] = useState<string | null>(null);
+  const signatureRef = useRef<any>(null);
+
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  // Historial
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (isAuthenticated && userToken) {
+      fetchTemplates();
+      fetchHistory();
+    }
+  }, [isAuthenticated, userToken]);
+
+  const fetchHistory = async () => {
+    if (!userToken) return;
+    setLoadingHistory(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const response = await fetch(`${API_URL}/documents/history`, {
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setHistory(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    if (!userToken) return;
+    setLoadingTemplates(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const response = await fetch(`${API_URL}/templates`, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setTemplates(data.data);
+      }
+    } catch (e) {
+      console.log('Error fetching templates', e);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
 
   // Manejar Login
   const handleLogin = async () => {
@@ -74,6 +141,7 @@ export default function App() {
       // Login exitoso
       setIsLoading(false);
       setCurrentUser(data.user); // El backend devuelve el usuario en data.user
+      setUserToken(data.token);
       setIsAuthenticated(true);
       setDocNumber('');
       setPinCode('');
@@ -91,6 +159,65 @@ export default function App() {
     setErrorMessage('');
   };
 
+  const handleSaveDocument = async () => {
+    if (!selectedTemplate) return;
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const response = await fetch(`${API_URL}/documents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          templateId: selectedTemplate.id,
+          formData: formData
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert('¡Éxito!', 'Documento guardado y sincronizado exitosamente.');
+        setFormData({});
+        setSelectedTemplate(null);
+        setCurrentScreen('dashboard');
+        fetchHistory(); // Actualizar el historial
+      } else {
+        Alert.alert('Error', data.message || 'No se pudo guardar el documento.');
+      }
+    } catch (error) {
+      console.error('Error saving document:', error);
+      Alert.alert('Error', 'No se pudo conectar con el servidor.');
+    }
+  };
+
+  const handleTakePhoto = async (fieldId: string) => {
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert("Permiso Denegado", "Se requieren permisos de cámara para tomar fotos.");
+      return;
+    }
+    
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+    
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setFormData((prev: any) => ({...prev, [fieldId]: result.assets[0].uri}));
+    }
+  };
+
+  const handleSignatureOK = (signature: string) => {
+    if (activeSignatureFieldId) {
+      setFormData((prev: any) => ({...prev, [activeSignatureFieldId]: signature}));
+    }
+    setSignatureModalVisible(false);
+    setActiveSignatureFieldId(null);
+  };
+
   // Cierre de Sesión
   const handleLogout = () => {
     Alert.alert(
@@ -104,6 +231,7 @@ export default function App() {
           onPress: () => {
             setIsAuthenticated(false);
             setCurrentUser(null);
+            setUserToken(null);
             setCurrentScreen('dashboard');
           } 
         }
@@ -260,7 +388,12 @@ export default function App() {
         </View>
 
         {/* Content Screens */}
-        <ScrollView style={styles.mainContent}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+        <ScrollView style={styles.mainContent} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {currentScreen === 'dashboard' && (
             <View style={styles.dashboardView}>
               <Text style={styles.sectionTitle}>Acciones Principales</Text>
@@ -291,6 +424,19 @@ export default function App() {
                 </View>
               </TouchableOpacity>
 
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => setCurrentScreen('history')}
+              >
+                <View style={[styles.menuIconBox, { backgroundColor: '#10B981' }]}>
+                  <Text style={styles.menuIcon}>🕒</Text>
+                </View>
+                <View style={styles.menuText}>
+                  <Text style={styles.menuTitle}>Histórico</Text>
+                  <Text style={styles.menuDesc}>Ver mis documentos diligenciados</Text>
+                </View>
+              </TouchableOpacity>
+
               {/* Status Box */}
               <View style={styles.statusBox}>
                 <Text style={styles.statusBoxTitle}>Sincronización Local</Text>
@@ -316,21 +462,163 @@ export default function App() {
                 <Text style={styles.subViewTitle}>Plantillas Asignadas</Text>
               </View>
 
-              <View style={styles.templateCard}>
-                <Text style={styles.templateCardTitle}>Acta de Entrega de Insumos Médicos</Text>
-                <Text style={styles.templateCardDesc}>Constancia de insumos entregados en puestos de salud rurales.</Text>
-                <TouchableOpacity style={styles.fillBtn} onPress={() => Alert.alert('Simulador', 'Generador de documentos en tablet está listo para desarrollo.')}>
-                  <Text style={styles.fillBtnText}>Diligenciar Formulario</Text>
+              {loadingTemplates ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+              ) : templates.length === 0 ? (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No hay plantillas disponibles.</Text>
+              ) : (
+                templates.map((template) => (
+                  <View key={template.id} style={styles.templateCard}>
+                    <Text style={styles.templateCardTitle}>{template.name}</Text>
+                    <Text style={styles.templateCardDesc} numberOfLines={2}>{template.description || 'Sin descripción'}</Text>
+                    <TouchableOpacity 
+                      style={styles.fillBtn} 
+                      onPress={() => {
+                        setSelectedTemplate(template);
+                        setFormData({});
+                        setCurrentScreen('fill_form');
+                      }}
+                    >
+                      <Text style={styles.fillBtnText}>Diligenciar Formulario</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* Screen: Fill Form */}
+          {currentScreen === 'fill_form' && selectedTemplate && (
+            <View style={styles.subView}>
+              <View style={styles.subViewHeader}>
+                <TouchableOpacity onPress={() => setCurrentScreen('templates')} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
                 </TouchableOpacity>
+                <Text style={styles.subViewTitle} numberOfLines={1}>{selectedTemplate.name}</Text>
               </View>
 
-              <View style={styles.templateCard}>
-                <Text style={styles.templateCardTitle}>Registro de Mantenimiento de Equipos</Text>
-                <Text style={styles.templateCardDesc}>Reporte técnico del estado de equipos médicos en campo.</Text>
-                <TouchableOpacity style={styles.fillBtn} onPress={() => Alert.alert('Simulador', 'Generador de documentos en tablet está listo para desarrollo.')}>
-                  <Text style={styles.fillBtnText}>Diligenciar Formulario</Text>
-                </TouchableOpacity>
-              </View>
+              <View style={styles.formContainer}>
+                    {selectedTemplate.description ? (
+                      <Text style={styles.formDescription}>{selectedTemplate.description}</Text>
+                    ) : null}
+                    
+                    {selectedTemplate.fields?.map((field: any) => (
+                      <View key={field.id} style={styles.fieldGroup}>
+                        <Text style={styles.fieldLabel}>{field.label} {field.required ? '*' : ''}</Text>
+                        
+                        {field.type === 'text' && (
+                          <TextInput 
+                            style={styles.fieldInput} 
+                            placeholder="Escribe aquí..."
+                            value={formData[field.id] || ''}
+                            onChangeText={(t) => setFormData((prev: any) => ({...prev, [field.id]: t}))}
+                          />
+                        )}
+                        
+                        {field.type === 'number' && (
+                          <TextInput 
+                            style={styles.fieldInput} 
+                            placeholder="Ej. 123"
+                            keyboardType="numeric"
+                            value={formData[field.id] || ''}
+                            onChangeText={(t) => setFormData((prev: any) => ({...prev, [field.id]: t}))}
+                          />
+                        )}
+
+                        {field.type === 'date' && (
+                          <View>
+                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
+                              <Text style={{ color: formData[field.id] ? colors.text : '#A1A1AA' }}>
+                                {formData[field.id] || 'DD/MM/AAAA'}
+                              </Text>
+                            </TouchableOpacity>
+                            {showDatePicker.visible && showDatePicker.fieldId === field.id && (
+                              <DateTimePicker
+                                value={formData[field.id] ? new Date(formData[field.id]) : new Date()}
+                                mode="date"
+                                display="default"
+                                onChange={(event, selectedDate) => {
+                                  setShowDatePicker({ visible: false, fieldId: null });
+                                  if (selectedDate && event.type !== 'dismissed') {
+                                    const dateStr = selectedDate.toISOString().split('T')[0];
+                                    setFormData((prev: any) => ({...prev, [field.id]: dateStr}));
+                                  }
+                                }}
+                              />
+                            )}
+                          </View>
+                        )}
+                        
+                        {field.type === 'photo' && (
+                          <View>
+                            {formData[field.id] ? (
+                              <View style={{ position: 'relative' }}>
+                                <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 200, borderRadius: 8 }} resizeMode="cover" />
+                                <TouchableOpacity 
+                                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
+                                  onPress={() => handleTakePhoto(field.id)}
+                                >
+                                  <Text style={{ color: 'white', fontSize: 12 }}>🔄 Retomar</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <TouchableOpacity style={styles.photoBtn} onPress={() => handleTakePhoto(field.id)}>
+                                <Text style={styles.photoBtnText}>📸 Tomar Foto</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                        
+                        {field.type === 'signature' && (
+                          <View>
+                            {formData[field.id] ? (
+                              <View style={{ position: 'relative', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }}>
+                                <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 150 }} resizeMode="contain" />
+                                <TouchableOpacity 
+                                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
+                                  onPress={() => {
+                                    setActiveSignatureFieldId(field.id);
+                                    setSignatureModalVisible(true);
+                                  }}
+                                >
+                                  <Text style={{ color: 'white', fontSize: 12 }}>🔄 Firmar de nuevo</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : (
+                              <TouchableOpacity style={styles.signatureBtn} onPress={() => {
+                                setActiveSignatureFieldId(field.id);
+                                setSignatureModalVisible(true);
+                              }}>
+                                <Text style={styles.signatureBtnText}>✍️ Firmar Documento</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+
+                        {field.type === 'dropdown' && (
+                          <View style={[styles.fieldInput, { padding: 0, justifyContent: 'center' }]}>
+                            <Picker
+                              selectedValue={formData[field.id] || ''}
+                              onValueChange={(itemValue) => setFormData((prev: any) => ({...prev, [field.id]: itemValue}))}
+                              style={{ width: '100%', color: formData[field.id] ? colors.text : '#A1A1AA' }}
+                            >
+                              <Picker.Item label="Seleccionar opción..." value="" color="#A1A1AA" />
+                              {(field.options || []).map((opt: string, i: number) => (
+                                <Picker.Item key={i} label={opt} value={opt} color={colors.text} />
+                              ))}
+                            </Picker>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+
+                    <TouchableOpacity 
+                      style={[styles.button, styles.buttonPrimary, { marginTop: 20 }]}
+                      onPress={handleSaveDocument}
+                    >
+                      <Text style={styles.buttonText}>Guardar Documento</Text>
+                    </TouchableOpacity>
+                  </View>
             </View>
           )}
 
@@ -371,8 +659,120 @@ export default function App() {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Screen: History */}
+          {currentScreen === 'history' && (
+            <View style={styles.subView}>
+              <View style={styles.subViewHeader}>
+                <TouchableOpacity onPress={() => setCurrentScreen('dashboard')} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
+                </TouchableOpacity>
+                <Text style={styles.subViewTitle}>Histórico de Documentos</Text>
+              </View>
+
+              {loadingHistory ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+              ) : history.length === 0 ? (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No tienes documentos en tu historial.</Text>
+              ) : (
+                history.map((doc: any) => (
+                  <View key={doc.id} style={styles.templateCard}>
+                    <Text style={styles.templateCardTitle}>{doc.template?.name || 'Documento sin nombre'}</Text>
+                    <Text style={styles.templateCardDesc}>Fecha: {new Date(doc.createdAt).toLocaleDateString()}</Text>
+                    <Text style={styles.templateCardDesc}>Estado: {doc.syncStatus}</Text>
+                    <TouchableOpacity 
+                      style={[styles.fillBtn, { backgroundColor: colors.accent }]} 
+                      onPress={() => {
+                        setSelectedDocument(doc);
+                        setCurrentScreen('view_document');
+                      }}
+                    >
+                      <Text style={styles.fillBtnText}>Ver Contenido</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {/* Screen: View Document */}
+          {currentScreen === 'view_document' && selectedDocument && (
+            <View style={styles.subView}>
+              <View style={styles.subViewHeader}>
+                <TouchableOpacity onPress={() => setCurrentScreen('history')} style={styles.backBtn}>
+                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
+                </TouchableOpacity>
+                <Text style={styles.subViewTitle} numberOfLines={1}>{selectedDocument.template?.name}</Text>
+              </View>
+              
+              <View style={styles.formContainer}>
+                {Object.keys(selectedDocument.data || {}).map((key: string) => {
+                  const val = selectedDocument.data[key];
+                  return (
+                    <View key={key} style={styles.fieldGroup}>
+                      <Text style={styles.fieldLabel}>ID de campo: {key}</Text>
+                      {typeof val === 'string' && val.startsWith('file://') ? (
+                        <Image source={{ uri: val }} style={{ width: '100%', height: 200, borderRadius: 8 }} resizeMode="contain" />
+                      ) : (
+                        <TextInput 
+                          style={[styles.fieldInput, { backgroundColor: '#E5E7EB', color: '#6B7280' }]} 
+                          value={val?.toString() || 'Sin respuesta'}
+                          editable={false}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
+
+      <Modal visible={signatureModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSignatureModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: '95%', height: 450, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
+            <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => {
+                setSignatureModalVisible(false);
+                setActiveSignatureFieldId(null);
+              }}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={() => signatureRef.current?.clearSignature()}>
+                <Text style={{ color: '#FCD34D', fontWeight: 'bold' }}>Limpiar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={() => {
+                signatureRef.current?.readSignature();
+              }}>
+                <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+            <SignatureScreen
+              ref={signatureRef}
+              onOK={handleSignatureOK}
+              onEmpty={() => Alert.alert('Error', 'Por favor, dibuja una firma antes de guardar.')}
+              descriptionText="Dibuja tu firma arriba"
+              webStyle={`
+                .m-signature-pad {
+                  box-shadow: none; border: none;
+                }
+                .m-signature-pad--body {
+                  border: 1px solid #e8e8e8;
+                }
+                .m-signature-pad--footer {
+                  display: none;
+                  margin: 0px;
+                }
+              `}
+            />
+          </View>
+        </View>
+      </Modal>
+
       <StatusBar style="dark" />
     </SafeAreaView>
   );
@@ -839,7 +1239,70 @@ const styles = StyleSheet.create({
   },
   syncButtonText: {
     color: colors.white,
-    fontSize: 12,
     fontWeight: 'bold',
+    fontSize: 16,
+  },
+  formContainer: {
+    paddingBottom: 40,
+  },
+  formDescription: {
+    fontSize: 14,
+    color: '#4B5563', // gray-600
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  fieldGroup: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937', // gray-800
+    marginBottom: 8,
+  },
+  fieldInput: {
+    backgroundColor: '#F3F4F6', // gray-100
+    borderWidth: 1,
+    borderColor: '#D1D5DB', // gray-300
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#1F2937', // gray-800
+  },
+  photoBtn: {
+    backgroundColor: '#E5E7EB', // gray-200
+    padding: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#9CA3AF', // gray-400
+  },
+  photoBtnText: {
+    color: '#4B5563', // gray-600
+    fontWeight: '500',
+  },
+  signatureBtn: {
+    backgroundColor: '#F3F4F6', // gray-100
+    padding: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#9CA3AF', // gray-400
+  },
+  signatureBtnText: {
+    color: '#4B5563', // gray-600
+    fontWeight: '500',
+  },
+  dropdownSim: {
+    backgroundColor: '#F3F4F6', // gray-100
+    borderWidth: 1,
+    borderColor: '#D1D5DB', // gray-300
+    borderRadius: 8,
+    padding: 12,
+  },
+  dropdownSimText: {
+    color: '#6B7280', // gray-500
   }
 });

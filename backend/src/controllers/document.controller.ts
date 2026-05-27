@@ -11,6 +11,20 @@ export async function getAll(req: Request, res: Response): Promise<void> {
   }
 }
 
+export async function getHistory(req: Request, res: Response): Promise<void> {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'No autenticado' });
+      return;
+    }
+    const documents = await documentService.getDocumentsByUserId(userId);
+    res.json({ success: true, data: documents });
+  } catch (error: any) {
+    res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+}
+
 export async function getById(req: Request, res: Response): Promise<void> {
   try {
     const document = await documentService.getDocumentById(getParam(req, 'id'));

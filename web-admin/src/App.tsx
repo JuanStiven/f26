@@ -39,6 +39,7 @@ interface Template {
   fields: TemplateField[];
   createdAt: string;
   storagePath?: string;
+  assignedUsers?: any[];
 }
 
 export default function App() {
@@ -125,7 +126,8 @@ export default function App() {
     name: '',
     description: '',
     storagePath: '',
-    fields: []
+    fields: [],
+    assignedUsers: []
   });
 
   const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown'>('text');
@@ -261,21 +263,22 @@ export default function App() {
         name: newTemplate.name,
         description: newTemplate.description || '',
         storagePath: newTemplate.storagePath || 'Raíz',
-        fields: newTemplate.fields || []
+        fields: newTemplate.fields || [],
+        assignedUsers: newTemplate.assignedUsers?.map((u: any) => u.id) || []
       };
 
       if (newTemplate.id) {
         const response = await api.put(`/templates/${newTemplate.id}`, payload);
         if (response.data.success) {
           setTemplates(prev => prev.map(t => t.id === newTemplate.id ? response.data.data : t));
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [] });
           alert('Plantilla actualizada con éxito.');
         }
       } else {
         const response = await api.post('/templates', payload);
         if (response.data.success) {
           setTemplates(prev => [...prev, response.data.data]);
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [] });
           alert('Plantilla guardada con éxito.');
         }
       }
@@ -761,6 +764,43 @@ export default function App() {
                 )}
               </div>
 
+              {/* Empleados Asignados */}
+              <div className="border-t border-border pt-6 mt-4">
+                <label className="text-xs font-bold text-foreground mb-3 flex justify-between items-center">
+                  <span>Empleados Asignados</span>
+                  <span className="text-[10px] text-primary font-normal bg-primary/10 px-2 py-0.5 rounded-full">{newTemplate.assignedUsers?.length || 0} seleccionados</span>
+                </label>
+                <div className="w-full text-xs p-3 rounded-lg border border-border bg-background h-48 overflow-y-auto space-y-1">
+                  {employees.map(emp => {
+                    const isSelected = (newTemplate.assignedUsers || []).some((u: any) => u.id === emp.id);
+                    return (
+                      <label key={emp.id} className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer transition-colors ${isSelected ? 'border-primary/50 bg-primary/5' : 'border-transparent hover:bg-muted'}`}>
+                        <input 
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const current = newTemplate.assignedUsers || [];
+                            if (e.target.checked) {
+                              setNewTemplate(prev => ({ ...prev, assignedUsers: [...current, { id: emp.id, name: emp.name }] }));
+                            } else {
+                              setNewTemplate(prev => ({ ...prev, assignedUsers: current.filter((u: any) => u.id !== emp.id) }));
+                            }
+                          }}
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground text-xs">{emp.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{emp.document} - {emp.position || 'Empleado'}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                  {employees.length === 0 && (
+                    <div className="text-center p-4 text-muted-foreground">No hay empleados registrados.</div>
+                  )}
+                </div>
+              </div>
+
               {/* Guardar Todo */}
               <div className="border-t border-border pt-4 flex justify-end gap-3">
                 <button 
@@ -913,7 +953,8 @@ export default function App() {
                           name: t.name,
                           description: t.description,
                           storagePath: t.storagePath,
-                          fields: t.fields || []
+                          fields: t.fields || [],
+                          assignedUsers: t.assignedUsers || []
                         });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}

@@ -5,8 +5,29 @@ export async function getAllTemplates() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { signedDocuments: true } },
+      assignedUsers: { select: { id: true, name: true, document: true } }
     },
   });
+}
+
+export async function getTemplatesForUser(userId: string, role: string) {
+  if (role === 'ADMIN') {
+    return getAllTemplates();
+  } else {
+    return prisma.template.findMany({
+      where: {
+        assignedUsers: {
+          some: {
+            id: userId
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        _count: { select: { signedDocuments: true } },
+      },
+    });
+  }
 }
 
 export async function getTemplateById(id: string) {
@@ -33,6 +54,7 @@ export async function createTemplate(data: {
   description?: string;
   storagePath?: string;
   fields: any[];
+  assignedUsers?: string[];
 }) {
   return prisma.template.create({
     data: {
@@ -40,13 +62,20 @@ export async function createTemplate(data: {
       description: data.description || '',
       storagePath: data.storagePath || '',
       fields: data.fields,
+      assignedUsers: data.assignedUsers ? {
+        connect: data.assignedUsers.map(id => ({ id }))
+      } : undefined
     },
+    include: {
+      _count: { select: { signedDocuments: true } },
+      assignedUsers: { select: { id: true, name: true, document: true } }
+    }
   });
 }
 
 export async function updateTemplate(
   id: string,
-  data: { name?: string; description?: string; storagePath?: string; fields?: any[] }
+  data: { name?: string; description?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[] }
 ) {
   const exists = await prisma.template.findUnique({ where: { id } });
   if (!exists) {
@@ -55,7 +84,21 @@ export async function updateTemplate(
 
   return prisma.template.update({
     where: { id },
-    data,
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.description !== undefined && { description: data.description }),
+      ...(data.storagePath !== undefined && { storagePath: data.storagePath }),
+      ...(data.fields !== undefined && { fields: data.fields }),
+      ...(data.assignedUsers !== undefined && {
+        assignedUsers: {
+          set: data.assignedUsers.map(userId => ({ id: userId }))
+        }
+      })
+    },
+    include: {
+      _count: { select: { signedDocuments: true } },
+      assignedUsers: { select: { id: true, name: true, document: true } }
+    }
   });
 }
 

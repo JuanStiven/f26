@@ -4,6 +4,11 @@ import { getParam } from '../middlewares/helpers';
 
 export async function getAll(req: Request, res: Response): Promise<void> {
   try {
+    if (req.user) {
+      const templates = await templateService.getTemplatesForUser(req.user.userId, req.user.role);
+      res.json({ success: true, data: templates });
+      return;
+    }
     const templates = await templateService.getAllTemplates();
     res.json({ success: true, data: templates });
   } catch (error: any) {

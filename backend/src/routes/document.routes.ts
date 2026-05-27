@@ -7,6 +7,9 @@ const router = Router();
 // Listar documentos (admin ve todos)
 router.get('/', authenticate, requireAdmin, documentController.getAll);
 
+// Obtener historial del empleado logueado
+router.get('/history', authenticate, requireEmployee, documentController.getHistory);
+
 // Obtener documento por ID
 router.get('/:id', authenticate, requireEmployee, documentController.getById);
 
