@@ -24,7 +24,7 @@ const EMPLOYEES_DB = [
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<typeof EMPLOYEES_DB[0] | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   // Login Form States
   const [docNumber, setDocNumber] = useState('');
@@ -41,7 +41,7 @@ export default function App() {
   const [formData, setFormData] = useState<any>({});
 
   // Manejar Login
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setErrorMessage('');
     if (!docNumber.trim() || !pinCode.trim()) {
       setErrorMessage('Por favor ingresa tu número de cédula y PIN de seguridad.');
@@ -50,35 +50,38 @@ export default function App() {
 
     setIsLoading(true);
 
-    // Simular latencia de red / verificación local
-    setTimeout(() => {
-      const user = EMPLOYEES_DB.find(emp => emp.doc === docNumber.trim());
+    try {
+      // Determinar la URL correcta dependiendo del entorno (Emulador Android vs Web/iOS)
+      // Usamos la IP de la máquina de desarrollo porque un celular físico no entiende "localhost"
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      
+      const response = await fetch(`${API_URL}/auth/login/employee`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ document: docNumber.trim(), pin: pinCode.trim() }),
+      });
 
-      if (!user) {
-        setIsLoading(false);
-        setErrorMessage('El número de documento ingresado no está registrado.');
-        return;
-      }
+      const data = await response.json();
 
-      if (user.status === 'Inactivo') {
+      if (!response.ok || !data.success) {
         setIsLoading(false);
-        setErrorMessage('Este usuario se encuentra Inactivo en el sistema.');
-        return;
-      }
-
-      if (user.pin !== pinCode.trim()) {
-        setIsLoading(false);
-        setErrorMessage('PIN de seguridad incorrecto.');
+        setErrorMessage(data.message || 'Error al iniciar sesión. Verifica tus credenciales.');
         return;
       }
 
       // Login exitoso
       setIsLoading(false);
-      setCurrentUser(user);
+      setCurrentUser(data.user); // El backend devuelve el usuario en data.user
       setIsAuthenticated(true);
       setDocNumber('');
       setPinCode('');
-    }, 1200);
+    } catch (error) {
+      setIsLoading(false);
+      setErrorMessage('Error de conexión con el servidor. Verifica que el backend esté en ejecución.');
+      console.error('Login error:', error);
+    }
   };
 
   // Autorelleno de Demo
@@ -251,8 +254,8 @@ export default function App() {
           </View>
           <View style={styles.userDetails}>
             <Text style={styles.userName}>{currentUser?.name}</Text>
-            <Text style={styles.userRole}>{currentUser?.role}</Text>
-            <Text style={styles.userDoc}>C.C. {currentUser?.doc}</Text>
+            <Text style={styles.userRole}>{currentUser?.position || currentUser?.role}</Text>
+            <Text style={styles.userDoc}>C.C. {currentUser?.document || currentUser?.doc}</Text>
           </View>
         </View>
 

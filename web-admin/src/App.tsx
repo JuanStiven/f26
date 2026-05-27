@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MainLayout } from './components/layout/main-layout';
 import { LoginPage } from './components/auth/login';
 import { FileExplorer } from './components/explorer/file-explorer';
@@ -17,16 +17,19 @@ import {
   Building,
   Save,
   Grid,
-  X
+  X,
+  TextSelect
 } from 'lucide-react';
 
 interface TemplateField {
   id: string;
-  type: 'text' | 'number' | 'date' | 'photo' | 'signature' | 'table';
+  type: 'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown';
   label: string;
   placeholder?: string;
   required: boolean;
   columns?: string[]; // Para campos tipo tabla
+  options?: string[]; // Para campos tipo dropdown
+  category?: string; // Para agrupar por categoría
 }
 
 interface Template {
@@ -125,14 +128,48 @@ export default function App() {
     fields: []
   });
 
-  const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table'>('text');
+  const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown'>('text');
   const [fieldLabel, setFieldLabel] = useState('');
+  const [fieldCategory, setFieldCategory] = useState('General');
   const [fieldRequired, setFieldRequired] = useState(true);
   const [tableCols, setTableCols] = useState('');
+  const [dropdownOptions, setDropdownOptions] = useState('');
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
+
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertTagToDescription = (tag: string) => {
+    const textarea = descriptionRef.current;
+    const currentDesc = newTemplate.description || '';
+    
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const insert = ` {{${tag}}} `;
+      
+      const newDesc = currentDesc.substring(0, start) + insert + currentDesc.substring(end);
+      setNewTemplate(prev => ({ ...prev, description: newDesc }));
+      
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + insert.length, start + insert.length);
+      }, 0);
+    } else {
+      setNewTemplate(prev => ({ ...prev, description: currentDesc + ` {{${tag}}} ` }));
+    }
+  };
 
   // Empleados Modal State
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState(false);
   const [employeeToDelete, setEmployeeToDelete] = useState<any>(null);
+
+  // Template Modal State
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<any>(null);
+  
+  // Template Preview Modal State
+  const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   const [newEmployee, setNewEmployee] = useState({
     id: undefined as string | undefined,
     name: '',
@@ -146,21 +183,67 @@ export default function App() {
   const addFieldToTemplate = () => {
     if (!fieldLabel.trim()) return;
 
-    const newField: TemplateField = {
-      id: Math.random().toString(36).substr(2, 9),
+    const fieldData = {
       type: selectedFieldType,
       label: fieldLabel,
       required: fieldRequired,
-      columns: selectedFieldType === 'table' ? tableCols.split(',').map(c => c.trim()).filter(Boolean) : undefined
+      columns: selectedFieldType === 'table' ? tableCols.split(',').map(c => c.trim()).filter(Boolean) : undefined,
+      options: selectedFieldType === 'dropdown' ? dropdownOptions.split(',').map(o => o.trim()).filter(Boolean) : undefined,
+      category: fieldCategory.trim() || 'General'
     };
 
-    setNewTemplate(prev => ({
-      ...prev,
-      fields: [...(prev.fields || []), newField]
-    }));
+    if (editingFieldId) {
+      setNewTemplate(prev => ({
+        ...prev,
+        fields: prev.fields?.map(f => f.id === editingFieldId ? { ...f, ...fieldData } : f)
+      }));
+      setEditingFieldId(null);
+    } else {
+      setNewTemplate(prev => ({
+        ...prev,
+        fields: [...(prev.fields || []), { id: Math.random().toString(36).substr(2, 9), ...fieldData }]
+      }));
+    }
 
     setFieldLabel('');
     setTableCols('');
+    setDropdownOptions('');
+  };
+
+  const editField = (field: TemplateField) => {
+    setEditingFieldId(field.id);
+    setFieldLabel(field.label);
+    setSelectedFieldType(field.type);
+    setFieldRequired(field.required);
+    setFieldCategory(field.category || 'General');
+    setTableCols(field.columns?.join(', ') || '');
+    setDropdownOptions(field.options?.join(', ') || '');
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedFieldId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedFieldId || draggedFieldId === targetId) return;
+
+    const newFields = [...(newTemplate.fields || [])];
+    const draggedIndex = newFields.findIndex(f => f.id === draggedFieldId);
+    const targetIndex = newFields.findIndex(f => f.id === targetId);
+
+    if (draggedIndex !== -1 && targetIndex !== -1) {
+      const [draggedField] = newFields.splice(draggedIndex, 1);
+      draggedField.category = newFields[targetIndex].category;
+      newFields.splice(targetIndex, 0, draggedField);
+      setNewTemplate(prev => ({ ...prev, fields: newFields }));
+    }
+    setDraggedFieldId(null);
   };
 
   const removeFieldFromTemplate = (id: string) => {
@@ -174,20 +257,45 @@ export default function App() {
     if (!newTemplate.name) return;
     try {
       const { default: api } = await import('./utils/api');
-      const response = await api.post('/templates', {
+      const payload = {
         name: newTemplate.name,
         description: newTemplate.description || '',
         storagePath: newTemplate.storagePath || 'Raíz',
         fields: newTemplate.fields || []
-      });
+      };
 
-      if (response.data.success) {
-        setTemplates(prev => [...prev, response.data.data]);
-        setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
-        alert('Plantilla guardada con éxito.');
+      if (newTemplate.id) {
+        const response = await api.put(`/templates/${newTemplate.id}`, payload);
+        if (response.data.success) {
+          setTemplates(prev => prev.map(t => t.id === newTemplate.id ? response.data.data : t));
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
+          alert('Plantilla actualizada con éxito.');
+        }
+      } else {
+        const response = await api.post('/templates', payload);
+        if (response.data.success) {
+          setTemplates(prev => [...prev, response.data.data]);
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '' });
+          alert('Plantilla guardada con éxito.');
+        }
       }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error guardando plantilla');
+    }
+  };
+
+  const deleteTemplate = async () => {
+    if (!templateToDelete) return;
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.delete(`/templates/${templateToDelete.id}`);
+      if (response.data.success) {
+        setTemplates(prev => prev.filter(t => t.id !== templateToDelete.id));
+        setIsTemplateModalOpen(false);
+        setTemplateToDelete(null);
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error al eliminar plantilla');
     }
   };
 
@@ -431,7 +539,7 @@ export default function App() {
             <div className="xl:col-span-3 bg-card border border-border rounded-lg shadow-sm p-6 space-y-6">
               <h3 className="font-semibold text-foreground border-b border-border pb-3">Detalles de la Plantilla</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Nombre de la Plantilla</label>
                   <input 
@@ -443,32 +551,57 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">Descripción</label>
-                  <input 
-                    type="text" 
-                    placeholder="Escribe una breve descripción del documento..."
-                    value={newTemplate.description || ''}
-                    onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Ruta de Almacenamiento (Servidor)</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ej. RRHH/empleados o CALIDAD/AUDITORIAS"
+                  <select 
                     value={newTemplate.storagePath || ''}
                     onChange={(e) => setNewTemplate(prev => ({ ...prev, storagePath: e.target.value }))}
                     className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
-                  />
+                  >
+                    <option value="">Raíz (Directorio Principal)</option>
+                    {folders.map(folder => (
+                      <option key={folder.id} value={folder.path}>{folder.path}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex justify-between items-end">
+                  <label className="text-xs font-medium text-muted-foreground">Cuerpo del Documento (Descripción)</label>
+                  <span className="text-[10px] text-muted-foreground italic">Usa el botón "Insertar" en tus campos para agregarlos aquí</span>
+                </div>
+                <textarea 
+                  ref={descriptionRef}
+                  placeholder="Ej. Yo {{Nombre Empleado}} identificado con número de documento {{Cédula}} certifico que..."
+                  value={newTemplate.description || ''}
+                  onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full text-xs p-3 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none min-h-[120px] resize-y"
+                />
               </div>
 
               {/* Agregar nuevo campo */}
               <div className="bg-muted/30 p-4 rounded-lg border border-border space-y-4">
                 <h4 className="text-xs font-bold text-foreground">Añadir Campo al Documento</h4>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Categoría</label>
+                    <input 
+                      type="text" 
+                      list="field-categories"
+                      placeholder="Ej. Datos del paciente"
+                      value={fieldCategory}
+                      onChange={(e) => setFieldCategory(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                    />
+                    <datalist id="field-categories">
+                      <option value="General" />
+                      <option value="Datos del paciente" />
+                      <option value="Información Clínica" />
+                      <option value="Firmas" />
+                    </datalist>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Etiqueta del Campo</label>
                     <input 
@@ -493,6 +626,7 @@ export default function App() {
                       <option value="photo">Fotografía (Cámara)</option>
                       <option value="signature">Firma Táctil</option>
                       <option value="table">Tabla de Contenidos</option>
+                      <option value="dropdown">Lista Desplegable (Dropdown)</option>
                     </select>
                   </div>
 
@@ -524,13 +658,42 @@ export default function App() {
                   </div>
                 )}
 
-                <button 
-                  onClick={addFieldToTemplate}
-                  className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar Campo
-                </button>
+                {selectedFieldType === 'dropdown' && (
+                  <div className="space-y-1 animate-in fade-in duration-200">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Opciones (Separadas por comas)</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. Opción 1, Opción 2, Opción 3"
+                      value={dropdownOptions}
+                      onChange={(e) => setDropdownOptions(e.target.value)}
+                      className="w-full text-xs p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={addFieldToTemplate}
+                    className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
+                  >
+                    {editingFieldId ? <Edit2 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {editingFieldId ? 'Guardar Cambios' : 'Agregar Campo'}
+                  </button>
+                  {editingFieldId && (
+                    <button 
+                      onClick={() => {
+                        setEditingFieldId(null);
+                        setFieldLabel('');
+                        setTableCols('');
+                        setDropdownOptions('');
+                      }}
+                      className="bg-muted text-muted-foreground text-xs px-4 py-2 rounded-lg hover:bg-muted/80 transition-colors flex items-center gap-1.5"
+                    >
+                      <X className="h-4 w-4" />
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Lista de campos actuales */}
@@ -541,22 +704,57 @@ export default function App() {
                   <p className="text-xs text-muted-foreground italic bg-muted/10 p-4 rounded border border-border text-center">No has agregado ningún campo todavía. Utiliza el constructor de arriba.</p>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {newTemplate.fields.map((field, index) => (
-                      <div key={field.id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/50 hover:bg-muted/20 transition-all">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-muted-foreground w-4">{index + 1}</span>
-                          <div>
-                            <span className="text-xs font-semibold text-foreground">{field.label}</span>
-                            <span className="ml-2 text-[10px] bg-secondary/10 text-muted-foreground border border-border/80 px-2 py-0.5 rounded-full capitalize">{field.type}</span>
-                            {field.required && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full">Requerido</span>}
+                    {Object.entries((newTemplate.fields || []).reduce((acc, field) => {
+                      const cat = field.category || 'General';
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(field);
+                      return acc;
+                    }, {} as Record<string, TemplateField[]>)).map(([category, fields]) => (
+                      <div key={category} className="space-y-2 mb-4">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/20 py-1 px-2 rounded">{category}</div>
+                        {fields.map((field, index) => (
+                          <div 
+                            key={field.id} 
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, field.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, field.id)}
+                            className="flex items-center justify-between p-3 rounded-lg border border-border bg-card/50 hover:bg-muted/20 transition-all cursor-move"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-bold text-muted-foreground w-4">{index + 1}</span>
+                              <div>
+                                <span className="text-xs font-semibold text-foreground">{field.label}</span>
+                                <span className="ml-2 text-[10px] bg-secondary/10 text-muted-foreground border border-border/80 px-2 py-0.5 rounded-full capitalize">{field.type}</span>
+                                {field.required && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full">Requerido</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={() => insertTagToDescription(field.label)}
+                                className="text-primary hover:bg-primary/10 p-1.5 rounded transition-colors flex items-center gap-1"
+                                title="Insertar en el texto"
+                              >
+                                <TextSelect className="h-4 w-4" />
+                                <span className="text-[10px] font-medium hidden sm:inline">Insertar</span>
+                              </button>
+                              <button 
+                                onClick={() => editField(field)}
+                                className="text-brand-secondary hover:bg-brand-secondary/10 p-1.5 rounded transition-colors"
+                                title="Editar campo"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button 
+                                onClick={() => removeFieldFromTemplate(field.id)}
+                                className="text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors"
+                                title="Eliminar campo"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <button 
-                          onClick={() => removeFieldFromTemplate(field.id)}
-                          className="text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -594,57 +792,76 @@ export default function App() {
 
                 <div className="space-y-2">
                   <h4 className="text-sm font-bold text-primary">{newTemplate.name || 'Sin Título de Plantilla'}</h4>
-                  <p className="text-xs text-muted-foreground">{newTemplate.description || 'Sin descripción'}</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{newTemplate.description || 'Sin descripción'}</p>
                 </div>
 
                 <div className="h-px bg-border/80 my-4" />
 
                 {/* Render inputs list dynamic preview */}
                 <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-                  {(newTemplate.fields || []).map((field) => (
-                    <div key={field.id} className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                        {field.label}
-                        {field.required && <span className="text-destructive">*</span>}
-                      </label>
+                  {Object.entries((newTemplate.fields || []).reduce((acc, field) => {
+                    const cat = field.category || 'General';
+                    if (!acc[cat]) acc[cat] = [];
+                    acc[cat].push(field);
+                    return acc;
+                  }, {} as Record<string, TemplateField[]>)).map(([category, fields]) => (
+                    <div key={category} className="space-y-3 mb-4">
+                      <h5 className="text-[11px] font-bold text-primary uppercase border-b border-border/50 pb-1">{category}</h5>
+                      {fields.map((field) => (
+                        <div key={field.id} className="space-y-1.5">
+                          <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                            {field.label}
+                            {field.required && <span className="text-destructive">*</span>}
+                          </label>
 
-                      {field.type === 'text' && (
-                        <input type="text" placeholder="Ejemplo de respuesta..." disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
-                      )}
+                          {field.type === 'text' && (
+                            <input type="text" placeholder="Ejemplo de respuesta..." disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
 
-                      {field.type === 'number' && (
-                        <input type="number" placeholder="Ej. 12345" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
-                      )}
+                          {field.type === 'number' && (
+                            <input type="number" placeholder="Ej. 12345" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
 
-                      {field.type === 'date' && (
-                        <input type="date" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
-                      )}
+                          {field.type === 'date' && (
+                            <input type="date" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
 
-                      {field.type === 'photo' && (
-                        <div className="border border-dashed border-border rounded-lg p-3 bg-muted/20 text-center flex flex-col items-center justify-center gap-1 opacity-70">
-                          <Camera className="h-5 w-5 text-muted-foreground" />
-                          <span className="text-[10px] text-muted-foreground">Botón de captura (Cámara del dispositivo)</span>
+                          {field.type === 'photo' && (
+                            <div className="border border-dashed border-border rounded-lg p-3 bg-muted/20 text-center flex flex-col items-center justify-center gap-1 opacity-70">
+                              <Camera className="h-5 w-5 text-muted-foreground" />
+                              <span className="text-[10px] text-muted-foreground">Botón de captura (Cámara del dispositivo)</span>
+                            </div>
+                          )}
+
+                          {field.type === 'signature' && (
+                            <div className="border border-dashed border-border rounded-lg p-4 bg-muted/10 text-center flex flex-col items-center justify-center gap-1 h-20 opacity-70">
+                              <span className="text-[10px] text-muted-foreground">Área para firmar con el dedo / lápiz táctil</span>
+                            </div>
+                          )}
+
+                          {field.type === 'table' && (
+                            <div className="border border-border rounded-lg overflow-hidden bg-card opacity-70">
+                              <div className="grid grid-cols-3 bg-muted/50 border-b border-border text-[9px] font-bold text-muted-foreground p-1 px-2">
+                                {(field.columns || ['Columna 1', 'Columna 2']).map((c, i) => (
+                                  <span key={i} className="truncate">{c}</span>
+                                ))}
+                              </div>
+                              <div className="p-2 border-b border-border/40 text-[10px] text-muted-foreground italic text-center">
+                                Cuadrícula de tabla interactiva
+                              </div>
+                            </div>
+                          )}
+
+                          {field.type === 'dropdown' && (
+                            <select disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed">
+                              <option>Selecciona una opción...</option>
+                              {(field.options || []).map((o, i) => (
+                                <option key={i} value={o}>{o}</option>
+                              ))}
+                            </select>
+                          )}
                         </div>
-                      )}
-
-                      {field.type === 'signature' && (
-                        <div className="border border-dashed border-border rounded-lg p-4 bg-muted/10 text-center flex flex-col items-center justify-center gap-1 h-20 opacity-70">
-                          <span className="text-[10px] text-muted-foreground">Área para firmar con el dedo / lápiz táctil</span>
-                        </div>
-                      )}
-
-                      {field.type === 'table' && (
-                        <div className="border border-border rounded-lg overflow-hidden bg-card opacity-70">
-                          <div className="grid grid-cols-3 bg-muted/50 border-b border-border text-[9px] font-bold text-muted-foreground p-1 px-2">
-                            {(field.columns || ['Columna 1', 'Columna 2']).map((c, i) => (
-                              <span key={i} className="truncate">{c}</span>
-                            ))}
-                          </div>
-                          <div className="p-2 border-b border-border/40 text-[10px] text-muted-foreground italic text-center">
-                            Cuadrícula de tabla interactiva
-                          </div>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   ))}
 
@@ -682,10 +899,37 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0">
-                    <button className="p-1.5 rounded hover:bg-muted text-primary">
+                    <button 
+                      onClick={() => setPreviewTemplate(t)}
+                      className="p-1.5 rounded hover:bg-muted text-accent"
+                      title="Ver vista previa"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setNewTemplate({
+                          id: t.id,
+                          name: t.name,
+                          description: t.description,
+                          storagePath: t.storagePath,
+                          fields: t.fields || []
+                        });
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="p-1.5 rounded hover:bg-muted text-primary"
+                      title="Editar plantilla"
+                    >
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    <button className="p-1.5 rounded hover:bg-muted text-destructive">
+                    <button 
+                      onClick={() => {
+                        setTemplateToDelete(t);
+                        setIsTemplateModalOpen(true);
+                      }}
+                      className="p-1.5 rounded hover:bg-muted text-destructive"
+                      title="Eliminar plantilla"
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -770,19 +1014,17 @@ export default function App() {
                         className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                       />
                     </div>
-                    {newEmployee.id && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Estado</label>
-                        <select 
-                          value={newEmployee.status}
-                          onChange={(e) => setNewEmployee({...newEmployee, status: e.target.value})}
-                          className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                        >
-                          <option value="Activo">Activo</option>
-                          <option value="Inactivo">Inactivo</option>
-                        </select>
-                      </div>
-                    )}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                      <select 
+                        value={newEmployee.status}
+                        onChange={(e) => setNewEmployee({...newEmployee, status: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      >
+                        <option value="Activo">Activo</option>
+                        <option value="Inactivo">Inactivo</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="px-6 py-4 border-t border-border bg-muted/10 flex justify-end gap-3">
                     <button 
@@ -1086,6 +1328,147 @@ export default function App() {
                 <Save className="h-4 w-4" />
                 Guardar Ajustes
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Eliminar Plantilla */}
+      {isTemplateModalOpen && templateToDelete && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+                <Trash2 className="h-6 w-6 text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold text-foreground">¿Eliminar Plantilla?</h3>
+                <p className="text-sm text-muted-foreground">Estás a punto de eliminar la plantilla <strong className="text-foreground">{templateToDelete.name}</strong>. Esta acción no se puede deshacer.</p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-border bg-muted/30 flex gap-3">
+              <button 
+                onClick={() => {
+                  setIsTemplateModalOpen(false);
+                  setTemplateToDelete(null);
+                }}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={deleteTemplate}
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                Sí, Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Template Preview Modal */}
+      {previewTemplate && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+            <div className="flex justify-between items-center p-4 border-b border-border bg-muted/30">
+              <h3 className="font-bold text-foreground flex items-center gap-2">
+                <Eye className="h-5 w-5 text-primary" />
+                Vista Previa: {previewTemplate.name}
+              </h3>
+              <button 
+                onClick={() => setPreviewTemplate(null)}
+                className="p-1.5 hover:bg-muted text-muted-foreground rounded transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto bg-background flex-1 relative space-y-6">
+              
+              <div className="flex items-center gap-3 border-b border-border pb-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Building className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-xs text-foreground uppercase tracking-wider">{companySettings.name}</h3>
+                  <p className="text-[10px] text-muted-foreground leading-tight">NIT: {companySettings.nit} | Dir: {companySettings.address}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-bold text-primary">{previewTemplate.name || 'Sin Título de Plantilla'}</h4>
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{previewTemplate.description || 'Sin descripción'}</p>
+              </div>
+
+              <div className="h-px bg-border/80 my-4" />
+
+              <div className="space-y-4 pr-1">
+                {Object.entries((previewTemplate.fields || []).reduce((acc, field) => {
+                  const cat = field.category || 'General';
+                  if (!acc[cat]) acc[cat] = [];
+                  acc[cat].push(field);
+                  return acc;
+                }, {} as Record<string, TemplateField[]>)).map(([category, fields]) => (
+                  <div key={category} className="space-y-3 mb-4">
+                    <h5 className="text-[11px] font-bold text-primary uppercase border-b border-border/50 pb-1">{category}</h5>
+                    {fields.map((field) => (
+                      <div key={field.id} className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                          {field.label}
+                          {field.required && <span className="text-destructive">*</span>}
+                        </label>
+
+                        {field.type === 'text' && (
+                          <input type="text" placeholder="Ejemplo de respuesta..." disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'number' && (
+                          <input type="number" placeholder="Ej. 12345" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'date' && (
+                          <input type="date" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'photo' && (
+                          <div className="border border-dashed border-border rounded-lg p-3 bg-muted/20 text-center flex flex-col items-center justify-center gap-1 opacity-70">
+                            <Camera className="h-5 w-5 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">Botón de captura (Cámara del dispositivo)</span>
+                          </div>
+                        )}
+
+                        {field.type === 'signature' && (
+                          <div className="border border-dashed border-border rounded-lg p-4 bg-muted/10 text-center flex flex-col items-center justify-center gap-1 h-20 opacity-70">
+                            <span className="text-[10px] text-muted-foreground">Área para firmar con el dedo / lápiz táctil</span>
+                          </div>
+                        )}
+
+                        {field.type === 'table' && (
+                          <div className="border border-border rounded-lg overflow-hidden bg-card opacity-70">
+                            <div className="grid grid-cols-3 bg-muted/50 border-b border-border text-[9px] font-bold text-muted-foreground p-1 px-2">
+                              {(field.columns || ['Columna 1', 'Columna 2']).map((c, i) => (
+                                <span key={i} className="truncate">{c}</span>
+                              ))}
+                            </div>
+                            <div className="p-2 border-b border-border/40 text-[10px] text-muted-foreground italic text-center">
+                              Cuadrícula de tabla interactiva
+                            </div>
+                          </div>
+                        )}
+
+                        {field.type === 'dropdown' && (
+                          <select disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed">
+                            <option>Selecciona una opción...</option>
+                            {(field.options || []).map((o, i) => (
+                              <option key={i} value={o}>{o}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
