@@ -82,8 +82,8 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
           
           {/* Logo & Header */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-md">
-              <span className="text-primary font-bold text-lg">ESE</span>
+            <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center border border-primary/20 shadow-md overflow-hidden p-1">
+              <img src="/logo_es.png" alt="ESE Norte 3 Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">ESE NORTE 3</h1>
@@ -165,8 +165,8 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
           
           {/* Logo on mobile view only */}
           <div className="lg:hidden flex items-center gap-3 justify-center mb-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-              <span className="text-primary font-bold text-lg">ESE</span>
+            <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center border border-primary/20 overflow-hidden p-1">
+              <img src="/logo_es.png" alt="ESE Norte 3 Logo" className="w-full h-full object-contain" />
             </div>
             <div className="text-left">
               <h1 className="text-xl font-bold text-foreground">ESE NORTE 3</h1>
@@ -281,15 +281,20 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
         </div>
 
         {/* Footer info to match latency metrics in ispgo */}
-        <div className="text-center text-[10px] text-muted-foreground border-t border-border/60 pt-4 flex items-center justify-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span>Servidor Operativo</span>
+        <div className="text-center text-[10px] text-muted-foreground border-t border-border/60 pt-4 flex flex-col items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span>Servidor Operativo</span>
+            </div>
+            <span>•</span>
+            <span>Versión 1.0.0</span>
+            <span>•</span>
+            <span>Latencia DB: 8ms</span>
           </div>
-          <span>•</span>
-          <span>Versión 1.0.0</span>
-          <span>•</span>
-          <span>Latencia DB: 8ms</span>
+          <div className="mt-1 font-medium text-[10px] text-muted-foreground/80">
+            © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo
+          </div>
         </div>
 
       </div>

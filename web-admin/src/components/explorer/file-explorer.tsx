@@ -15,7 +15,9 @@ import {
   Plus, 
   X, 
   Download, 
-  Check
+  Check,
+  ChevronLeft,
+  RefreshCw
 } from 'lucide-react';
 
 export interface FileNode {
@@ -29,17 +31,22 @@ export interface FileNode {
   author?: string;
   fields?: any[];
   content?: string;
+  rawDoc?: any;
 }
 
 interface FileExplorerProps {
   templates: any[];
   signedDocuments: any[];
   folders: any[];
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
-export function FileExplorer({ templates, signedDocuments, folders }: FileExplorerProps) {
+export function FileExplorer({ templates, signedDocuments, folders, onRefresh, isRefreshing }: FileExplorerProps) {
   // Estado de los nodos
   const [nodes, setNodes] = useState<FileNode[]>([]);
+  const [contentModalNode, setContentModalNode] = useState<FileNode | null>(null);
+  const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
 
   React.useEffect(() => {
     // Map backend folders to FileNode format
@@ -106,7 +113,8 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
         size: '1.1 MB',
         createdAt: doc.date || doc.createdAt,
         author: docFilledByName,
-        content: `Documento firmado. Estado sinc: ${doc.syncStatus}`
+        content: `Documento firmado. Estado sinc: ${doc.syncStatus}`,
+        rawDoc: doc
       });
     });
 
@@ -122,6 +130,14 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
   });
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Pagination
+  const [folderCurrentPage, setFolderCurrentPage] = useState(1);
+  const folderItemsPerPage = 10;
+
+  React.useEffect(() => {
+    setFolderCurrentPage(1);
+  }, [selectedPath]);
+
   // Modals / Edit states
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
   const [newNameText, setNewNameText] = useState('');
@@ -474,9 +490,22 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
     <div className="space-y-6 animate-in fade-in duration-300">
       
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Gestión y Árbol de Archivos</h1>
-        <p className="text-muted-foreground">Administra y anida las plantillas o los documentos firmados en directorios estructurados en el servidor.</p>
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Gestión y Árbol de Archivos</h1>
+          <p className="text-muted-foreground">Administra y anida las plantillas o los documentos firmados en directorios estructurados en el servidor.</p>
+        </div>
+        {onRefresh && (
+          <button 
+            onClick={onRefresh} 
+            disabled={isRefreshing}
+            className="p-2 border border-border rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center gap-2 disabled:opacity-50" 
+            title="Refrescar datos"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+            <span className="hidden sm:inline text-[10px] font-medium uppercase tracking-wider">Refrescar</span>
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -649,78 +678,124 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
               </div>
 
               {/* Grid of items in this folder */}
-              <div className="border border-border/80 rounded-lg overflow-hidden mt-4 flex-1">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border text-xs font-semibold text-muted-foreground bg-muted/40">
-                      <th className="px-4 py-3">Nombre</th>
-                      <th className="px-4 py-3">Tipo</th>
-                      <th className="px-4 py-3">Tamaño</th>
-                      <th className="px-4 py-3">Fecha de Creación</th>
-                      <th className="px-4 py-3 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60 text-xs">
-                    {getChildrenOfPath(currentNode.path === 'Raíz' ? '' : currentNode.path).length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center py-12 text-muted-foreground italic bg-muted/5">
-                          Este directorio está vacío.
-                        </td>
+              <div className="border border-border/80 rounded-lg overflow-hidden mt-4 flex-1 flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-border text-xs font-semibold text-muted-foreground bg-muted/40">
+                        <th className="px-4 py-3">Nombre</th>
+                        <th className="px-4 py-3">Tipo</th>
+                        <th className="px-4 py-3">Tamaño</th>
+                        <th className="px-4 py-3">Fecha de Creación</th>
+                        <th className="px-4 py-3 text-right">Acciones</th>
                       </tr>
-                    ) : (
-                      getChildrenOfPath(currentNode.path === 'Raíz' ? '' : currentNode.path).map((node) => (
-                        <tr key={node.id} className="hover:bg-muted/20 transition-colors">
-                          <td 
-                            className="px-4 py-3 font-medium text-foreground flex items-center gap-2 cursor-pointer"
-                            onClick={() => setSelectedPath(node.path)}
-                          >
-                            {node.type === 'folder' ? (
-                              <Folder className="h-4 w-4 text-primary" />
-                            ) : node.fileType === 'template' ? (
-                              <FileCode className="h-4 w-4 text-brand-accent" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-red-500" />
-                            )}
-                            <span className="hover:underline">{node.name}</span>
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground capitalize">
-                            {node.type === 'folder' ? 'Carpeta' : `${node.fileType}`}
-                          </td>
-                          <td className="px-4 py-3 text-muted-foreground">{node.size || '--'}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{node.createdAt}</td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex justify-end gap-1">
-                              <button 
-                                onClick={() => startRename(node)}
-                                className="p-1 rounded hover:bg-muted text-primary"
-                                title="Renombrar"
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setMovingNode(node);
-                                  setMoveDestinationPath(node.path.includes('/') ? node.path.substring(0, node.path.lastIndexOf('/')) : 'Raíz');
-                                }}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground"
-                                title="Mover / Cambiar Ruta"
-                              >
-                                <Move className="h-3.5 w-3.5" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteNode(node)}
-                                className="p-1 rounded hover:bg-muted text-destructive"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 text-xs">
+                      {(() => {
+                        const folderChildren = getChildrenOfPath(currentNode.path === 'Raíz' ? '' : currentNode.path);
+                        const folderCurrentData = folderChildren.slice((folderCurrentPage - 1) * folderItemsPerPage, folderCurrentPage * folderItemsPerPage);
+
+                        if (folderChildren.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={5} className="text-center py-12 text-muted-foreground italic bg-muted/5">
+                                Este directorio está vacío.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <>
+                            {folderCurrentData.map((node) => (
+                              <tr key={node.id} className="hover:bg-muted/20 transition-colors">
+                                <td 
+                                  className="px-4 py-3 font-medium text-foreground flex items-center gap-2 cursor-pointer"
+                                  onClick={() => setSelectedPath(node.path)}
+                                >
+                                  {node.type === 'folder' ? (
+                                    <Folder className="h-4 w-4 text-primary" />
+                                  ) : node.fileType === 'template' ? (
+                                    <FileCode className="h-4 w-4 text-brand-accent" />
+                                  ) : (
+                                    <FileText className="h-4 w-4 text-red-500" />
+                                  )}
+                                  <span className="hover:underline">{node.name}</span>
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground capitalize">
+                                  {node.type === 'folder' ? 'Carpeta' : `${node.fileType}`}
+                                </td>
+                                <td className="px-4 py-3 text-muted-foreground">{node.size || '--'}</td>
+                                <td className="px-4 py-3 text-muted-foreground">{node.createdAt}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <button 
+                                      onClick={() => startRename(node)}
+                                      className="p-1 rounded hover:bg-muted text-primary"
+                                      title="Renombrar"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={() => {
+                                        setMovingNode(node);
+                                        setMoveDestinationPath(node.path.includes('/') ? node.path.substring(0, node.path.lastIndexOf('/')) : 'Raíz');
+                                      }}
+                                      className="p-1 rounded hover:bg-muted text-muted-foreground"
+                                      title="Mover / Cambiar Ruta"
+                                    >
+                                      <Move className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteNode(node)}
+                                      className="p-1 rounded hover:bg-muted text-destructive"
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {(() => {
+                  const folderChildren = getChildrenOfPath(currentNode.path === 'Raíz' ? '' : currentNode.path);
+                  const folderTotalPages = Math.max(1, Math.ceil(folderChildren.length / folderItemsPerPage));
+                  
+                  if (folderChildren.length === 0) return null;
+                  
+                  return (
+                    <div className="border-t border-border p-4 flex items-center justify-between text-xs text-muted-foreground mt-auto bg-card">
+                      <div>
+                        Mostrando {(folderCurrentPage - 1) * folderItemsPerPage + 1} a {Math.min(folderCurrentPage * folderItemsPerPage, folderChildren.length)} de {folderChildren.length}
+                      </div>
+                      <div className="flex gap-1 items-center">
+                        <span className="mr-2">Página {folderCurrentPage} de {folderTotalPages}</span>
+                        <button 
+                          disabled={folderCurrentPage <= 1}
+                          onClick={() => setFolderCurrentPage(prev => Math.max(1, prev - 1))}
+                          className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button 
+                          disabled={folderCurrentPage >= folderTotalPages}
+                          onClick={() => setFolderCurrentPage(prev => Math.min(folderTotalPages, prev + 1))}
+                          className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ) : (
@@ -745,31 +820,74 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setMovingNode(currentNode);
-                        setMoveDestinationPath(currentNode.path.includes('/') ? currentNode.path.substring(0, currentNode.path.lastIndexOf('/')) : 'Raíz');
-                      }}
-                      className="px-3 py-1.5 border border-border hover:bg-muted text-muted-foreground hover:text-foreground text-xs rounded-lg flex items-center gap-1 font-semibold transition-all"
+                  <div className="relative">
+                    <button
+                      onClick={() => setActionsDropdownOpen(!actionsDropdownOpen)}
+                      className="px-4 py-2 bg-primary text-white text-xs rounded-lg flex items-center gap-2 font-semibold transition-all hover:bg-primary/95"
                     >
-                      <Move className="h-4 w-4" />
-                      Mover Archivo
+                      Acciones
+                      <ChevronDown className={`h-4 w-4 transition-transform ${actionsDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
-                    <button 
-                      onClick={() => alert(`Descargando archivo: ${currentNode.name}`)}
-                      className="px-3 py-1.5 bg-primary text-white text-xs rounded-lg flex items-center gap-1 font-semibold transition-all hover:bg-primary/95"
-                    >
-                      <Download className="h-4 w-4" />
-                      Descargar
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteNode(currentNode)}
-                      className="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs rounded-lg flex items-center gap-1 font-semibold transition-all"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </button>
+                    
+                    {actionsDropdownOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-10" 
+                          onClick={() => setActionsDropdownOpen(false)}
+                        ></div>
+                        <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-lg shadow-lg z-20 flex flex-col p-1">
+                          <button 
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              setMovingNode(currentNode);
+                              setMoveDestinationPath(currentNode.path.includes('/') ? currentNode.path.substring(0, currentNode.path.lastIndexOf('/')) : 'Raíz');
+                            }}
+                            className="px-3 py-2 hover:bg-muted text-muted-foreground hover:text-foreground text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
+                          >
+                            <Move className="h-4 w-4" />
+                            Mover Archivo
+                          </button>
+                          
+                          {currentNode.fileType === 'document' && currentNode.rawDoc && (
+                            <button 
+                              onClick={() => {
+                                setActionsDropdownOpen(false);
+                                setContentModalNode(currentNode);
+                              }}
+                              className="px-3 py-2 text-primary hover:bg-primary/10 text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
+                            >
+                              <FileText className="h-4 w-4" />
+                              Ver Contenido
+                            </button>
+                          )}
+                          
+                          <button 
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+                              window.open(`${baseUrl}/uploads/${currentNode.path}`, '_blank');
+                            }}
+                            className="px-3 py-2 hover:bg-muted text-foreground text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
+                          >
+                            <Download className="h-4 w-4" />
+                            Descargar
+                          </button>
+                          
+                          <div className="h-px bg-border my-1" />
+                          
+                          <button 
+                            onClick={() => {
+                              setActionsDropdownOpen(false);
+                              handleDeleteNode(currentNode);
+                            }}
+                            className="px-3 py-2 hover:bg-destructive/10 text-destructive text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1011,6 +1129,114 @@ export function FileExplorer({ templates, signedDocuments, folders }: FileExplor
                 className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/95"
               >
                 Mover Elemento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content Modal */}
+      {contentModalNode && contentModalNode.rawDoc && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card w-full max-w-3xl rounded-xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h3 className="font-bold text-foreground truncate max-w-[80%]">{contentModalNode.rawDoc.template?.name || 'Documento'}</h3>
+              <button onClick={() => setContentModalNode(null)} className="p-1 hover:bg-muted text-muted-foreground rounded-md transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Header (Datos Empresa similar a mobile app) */}
+              <div className="flex border-b border-border pb-4 mb-4">
+                <div className="w-12 h-12 bg-primary rounded-lg flex justify-center items-center mr-3 shadow-md shadow-primary/20">
+                  <span className="text-white font-bold text-[10px] text-center leading-tight">ESE<br/>Norte 3</span>
+                </div>
+                <div className="flex flex-col justify-center">
+                  <span className="font-bold text-foreground leading-tight text-lg">ESE Norte 3</span>
+                  <span className="text-xs text-muted-foreground">Documento Histórico Diligenciado</span>
+                </div>
+              </div>
+              
+              {/* Descripción con Variables Reemplazadas */}
+              {(() => {
+                const description = contentModalNode.rawDoc.template?.description;
+                if (!description) return null;
+                const data = contentModalNode.rawDoc.data || {};
+                const fields = contentModalNode.rawDoc.template?.fields || [];
+                
+                const replaced = description.replace(/\{\{([^}]+)\}\}/g, (match: string, key: string) => {
+                  const cleanKey = key.trim();
+                  let val = data[cleanKey];
+                  if (!val) {
+                    const field = fields.find((f: any) => f.label === cleanKey);
+                    if (field) {
+                      val = data[field.id];
+                    }
+                  }
+                  return val ? val.toString() : match;
+                });
+                return (
+                  <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+                    <p className="text-sm text-primary/80 font-medium leading-relaxed italic text-justify">
+                      {replaced}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Renderizar campos iterando la data */}
+              <div className="space-y-4">
+                {Object.keys(contentModalNode.rawDoc.data || {}).map((key: string) => {
+                  const val = contentModalNode.rawDoc.data[key];
+                  const fieldDef = (contentModalNode.rawDoc.template?.fields || []).find((f: any) => f.id === key);
+                  const fieldLabel = fieldDef ? fieldDef.label : key;
+                  
+                  const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
+
+                  return (
+                    <div key={key} className="space-y-1">
+                      <span className="text-xs font-semibold text-muted-foreground">{fieldLabel}</span>
+                      {isMedia ? (
+                        <div className="border border-border rounded-lg overflow-hidden flex justify-center bg-muted/20 p-2">
+                           <img src={val} alt="media" className="max-h-40 object-contain rounded-md" />
+                        </div>
+                      ) : Array.isArray(val) ? (
+                        <div className="overflow-x-auto border border-border rounded-lg mt-1">
+                          <table className="w-full text-xs text-left">
+                            <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                              <tr>
+                                {Object.keys(val[0] || {}).map((col, i) => (
+                                  <th key={i} className="p-2">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {val.map((row, i) => (
+                                <tr key={i} className="bg-card">
+                                  {Object.values(row).map((cell: any, j) => (
+                                    <td key={j} className="p-2">{cell}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-lg border border-border bg-muted/10 text-sm text-foreground">
+                          {val?.toString() || 'Sin respuesta'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-border flex justify-end">
+              <button 
+                onClick={() => setContentModalNode(null)}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/95 transition-colors"
+              >
+                Cerrar Visualizador
               </button>
             </div>
           </div>

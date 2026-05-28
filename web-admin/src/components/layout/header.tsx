@@ -37,7 +37,7 @@ export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderPro
           <Menu className="h-5 w-5" />
         </button>
         <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider hidden sm:block">Panel de Control</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider hidden sm:block">P26</h2>
         </div>
       </div>
 

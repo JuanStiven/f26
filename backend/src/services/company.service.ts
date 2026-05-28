@@ -18,6 +18,9 @@ export async function updateSettings(data: {
   phone?: string;
   manager?: string;
   email?: string;
+  country?: string;
+  department?: string;
+  branch?: string;
   logoUrl?: string;
 }) {
   let settings = await prisma.companySettings.findFirst();

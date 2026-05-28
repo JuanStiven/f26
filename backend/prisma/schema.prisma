@@ -46,14 +46,17 @@ model User {
 
 // ─── Configuración de Empresa ────────────────────────
 model CompanySettings {
-  id      String  @id @default(uuid())
-  name    String  @default("ESE Norte 3")
-  nit     String  @default("800.123.456-7")
-  address String  @default("Calle 10 # 5-20, Sede Principal")
-  phone   String  @default("320 123 4567")
-  manager String  @default("Dra. María Helena Castro")
-  email   String  @default("contacto@esenorte3.gov.co")
-  logoUrl String?
+  id         String  @id @default(uuid())
+  name       String  @default("ESE Norte 3")
+  nit        String  @default("800.123.456-7")
+  address    String  @default("Calle 10 # 5-20, Sede Principal")
+  phone      String  @default("320 123 4567")
+  manager    String  @default("Dra. María Helena Castro")
+  email      String  @default("contacto@esenorte3.gov.co")
+  country    String  @default("Colombia")
+  department String  @default("Antioquia")
+  branch     String  @default("Sede Principal")
+  logoUrl    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -100,6 +103,7 @@ model SignedDocument {
   signatureUrl String?  // Imagen de la firma digital
   syncStatus SyncStatus @default(PENDING)
   filePath   String?    // Ruta física del archivo generado en el servidor
+  templateSnapshot Json? // Snapshot of the template at the time of creation
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

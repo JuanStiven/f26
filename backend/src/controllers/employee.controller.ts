@@ -4,7 +4,8 @@ import { getParam } from '../middlewares/helpers';
 
 export async function getAll(req: Request, res: Response): Promise<void> {
   try {
-    const employees = await employeeService.getAllEmployees();
+    const role = req.query.role as string;
+    const employees = await employeeService.getAllEmployees(role);
     res.json({ success: true, data: employees });
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });

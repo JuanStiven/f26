@@ -1,15 +1,16 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../models/prisma';
 
-export async function getAllEmployees() {
+export async function getAllEmployees(role?: string) {
   return prisma.user.findMany({
-    where: { role: 'EMPLOYEE' },
+    where: role ? { role: role as 'ADMIN' | 'EMPLOYEE' } : undefined,
     select: {
       id: true,
       name: true,
       document: true,
       position: true,
       status: true,
+      role: true,
       createdAt: true,
       _count: { select: { signedDocuments: true } },
     },
@@ -47,6 +48,7 @@ export async function createEmployee(data: {
   document: string;
   pin: string;
   position?: string;
+  role?: string;
 }) {
   // Verificar duplicado de cédula
   const exists = await prisma.user.findUnique({ where: { document: data.document } });
@@ -61,8 +63,8 @@ export async function createEmployee(data: {
       name: data.name,
       document: data.document,
       password: hashedPin,
-      role: 'EMPLOYEE',
-      position: data.position || 'Operario de Campo',
+      role: (data.role as 'ADMIN' | 'EMPLOYEE') || 'EMPLOYEE',
+      position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
       status: 'Activo',
     },
     select: {
@@ -70,6 +72,7 @@ export async function createEmployee(data: {
       name: true,
       document: true,
       position: true,
+      role: true,
       status: true,
       createdAt: true,
     },
@@ -99,6 +102,7 @@ export async function updateEmployee(
       name: true,
       document: true,
       position: true,
+      role: true,
       status: true,
     },
   });

@@ -9,9 +9,10 @@ interface MainLayoutProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   onLogout?: () => void;
+  companySettings?: { name: string; logoUrl: string | null };
 }
 
-export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleTheme, onLogout }: MainLayoutProps) {
+export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleTheme, onLogout, companySettings }: MainLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -24,6 +25,7 @@ export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleT
           setCollapsed={setSidebarCollapsed} 
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
+          companySettings={companySettings}
         />
       </div>
 
@@ -43,6 +45,7 @@ export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleT
                 setCurrentTab(tab);
                 setMobileMenuOpen(false);
               }}
+              companySettings={companySettings}
             />
           </div>
         </div>

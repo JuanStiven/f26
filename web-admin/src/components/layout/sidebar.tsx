@@ -16,9 +16,10 @@ interface SidebarProps {
   setCollapsed: (collapsed: boolean) => void;
   currentTab: string;
   setCurrentTab: (tab: string) => void;
+  companySettings?: { name: string; logoUrl: string | null };
 }
 
-export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab }: SidebarProps) {
+export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, companySettings }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'templates', label: 'DocBuilder (Plantillas)', icon: ClipboardList },
@@ -26,6 +27,7 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab }: 
     { id: 'users', label: 'Gestión de Empleados', icon: Users },
     { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
     { id: 'documents', label: 'Documentos Diligenciados', icon: FileText },
+    { id: 'admins', label: 'Usuarios (Admins)', icon: Users },
   ];
 
   const bottomItems = [
@@ -42,12 +44,16 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab }: 
       {/* Brand Logo Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-border">
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 shadow-md shadow-primary/20">
-            <span className="text-white font-bold text-sm">ESE</span>
-          </div>
+          {companySettings?.logoUrl ? (
+            <img src={companySettings.logoUrl} alt="Logo" className="w-8 h-8 rounded-lg object-contain shadow-md shadow-primary/20 shrink-0 bg-white" />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0 shadow-md shadow-primary/20">
+              <span className="text-white font-bold text-sm">ESE</span>
+            </div>
+          )}
           {!collapsed && (
             <div className="flex flex-col">
-              <span className="font-bold text-foreground leading-tight tracking-tight">ESE NORTE 3</span>
+              <span className="font-bold text-foreground leading-tight tracking-tight whitespace-nowrap overflow-hidden text-ellipsis">{companySettings?.name || 'ESE NORTE 3'}</span>
               <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Gestión Documental</span>
             </div>
           )}

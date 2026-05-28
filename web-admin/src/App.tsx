@@ -18,7 +18,13 @@ import {
   Save,
   Grid,
   X,
-  TextSelect
+  TextSelect,
+  Search,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 
 interface TemplateField {
@@ -30,6 +36,7 @@ interface TemplateField {
   columns?: string[]; // Para campos tipo tabla
   options?: string[]; // Para campos tipo dropdown
   category?: string; // Para agrupar por categoría
+  hideInPdf?: boolean; // Para ocultar en PDF
 }
 
 interface Template {
@@ -80,7 +87,10 @@ export default function App() {
     phone: '320 123 4567',
     manager: 'Dra. María Helena Castro',
     email: 'contacto@esenorte3.gov.co',
-    logo: null as string | null
+    country: 'Colombia',
+    department: 'Antioquia',
+    branch: 'Sede Principal',
+    logoUrl: null as string | null
   });
 
   const [employees, setEmployees] = useState<any[]>([]);
@@ -89,37 +99,53 @@ export default function App() {
   const [signedDocuments, setSignedDocuments] = useState<any[]>([]);
   const [folders, setFolders] = useState<any[]>([]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      setIsRefreshing(true);
+      const { default: api } = await import('./utils/api');
+      
+      const [compRes, empRes, senRes, tplRes, docRes, foldRes] = await Promise.all([
+        api.get('/company'),
+        api.get('/employees'),
+        api.get('/senders'),
+        api.get('/templates'),
+        api.get('/documents'),
+        api.get('/folders')
+      ]);
+
+      if (compRes.data.success && compRes.data.data) {
+        setCompanySettings(prev => ({ ...prev, ...compRes.data.data }));
+      }
+      if (empRes.data.success) setEmployees(empRes.data.data);
+      if (senRes.data.success) setSenders(senRes.data.data);
+      if (tplRes.data.success) setTemplates(tplRes.data.data);
+      if (docRes.data.success) setSignedDocuments(docRes.data.data);
+      if (foldRes.data.success) setFolders(foldRes.data.data);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    const fetchData = async () => {
-      try {
-        const { default: api } = await import('./utils/api');
-        
-        const [compRes, empRes, senRes, tplRes, docRes, foldRes] = await Promise.all([
-          api.get('/company'),
-          api.get('/employees'),
-          api.get('/senders'),
-          api.get('/templates'),
-          api.get('/documents'),
-          api.get('/folders')
-        ]);
-
-        if (compRes.data.success && compRes.data.data) {
-          setCompanySettings(prev => ({ ...prev, ...compRes.data.data }));
-        }
-        if (empRes.data.success) setEmployees(empRes.data.data);
-        if (senRes.data.success) setSenders(senRes.data.data);
-        if (tplRes.data.success) setTemplates(tplRes.data.data);
-        if (docRes.data.success) setSignedDocuments(docRes.data.data);
-        if (foldRes.data.success) setFolders(foldRes.data.data);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
-    };
-
     fetchData();
   }, [isAuthenticated]);
+
+  const RefreshButton = () => (
+    <button 
+      onClick={fetchData} 
+      disabled={isRefreshing}
+      className="p-2 border border-border rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors flex items-center gap-2 disabled:opacity-50" 
+      title="Refrescar datos"
+    >
+      <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin text-primary' : ''}`} />
+      <span className="hidden sm:inline text-[10px] font-medium uppercase tracking-wider">Refrescar</span>
+    </button>
+  );
 
   // Creador de Plantillas (DocBuilder State)
   const [newTemplate, setNewTemplate] = useState<Partial<Template>>({
@@ -134,10 +160,114 @@ export default function App() {
   const [fieldLabel, setFieldLabel] = useState('');
   const [fieldCategory, setFieldCategory] = useState('General');
   const [fieldRequired, setFieldRequired] = useState(true);
+  const [fieldHideInPdf, setFieldHideInPdf] = useState(false);
   const [tableCols, setTableCols] = useState('');
   const [dropdownOptions, setDropdownOptions] = useState('');
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
+  const [documentModal, setDocumentModal] = useState<any>(null);
+
+  // Pagination, Sorting and Filtering for Documents
+  const [docSearchTerm, setDocSearchTerm] = useState('');
+  const [docSortConfig, setDocSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [docCurrentPage, setDocCurrentPage] = useState(1);
+  const [docItemsPerPage] = useState(10);
+
+  // Pagination and Filtering for Employees
+  const [empSearchTerm, setEmpSearchTerm] = useState('');
+  const [empCurrentPage, setEmpCurrentPage] = useState(1);
+  const empItemsPerPage = 10;
+
+  // Pagination and Filtering for Admins
+  const [adminSearchTerm, setAdminSearchTerm] = useState('');
+  const [adminCurrentPage, setAdminCurrentPage] = useState(1);
+  const adminItemsPerPage = 10;
+
+  const handleDocSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (docSortConfig && docSortConfig.key === key && docSortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setDocSortConfig({ key, direction });
+  };
+
+  const filteredAndSortedDocs = React.useMemo(() => {
+    let result = [...signedDocuments];
+    
+    if (docSearchTerm) {
+      const lowerSearch = docSearchTerm.toLowerCase();
+      result = result.filter(doc => 
+        (doc.template?.name || 'Documento').toLowerCase().includes(lowerSearch) ||
+        (doc.filledBy?.name || doc.filledBy || 'Empleado').toLowerCase().includes(lowerSearch)
+      );
+    }
+    
+    if (docSortConfig) {
+      result.sort((a, b) => {
+        let valA: any = '';
+        let valB: any = '';
+        
+        switch (docSortConfig.key) {
+          case 'templateName':
+            valA = (a.template?.name || 'Documento').toLowerCase();
+            valB = (b.template?.name || 'Documento').toLowerCase();
+            break;
+          case 'filledBy':
+            valA = (a.filledBy?.name || a.filledBy || 'Empleado').toLowerCase();
+            valB = (b.filledBy?.name || b.filledBy || 'Empleado').toLowerCase();
+            break;
+          case 'createdAt':
+            valA = new Date(a.createdAt).getTime();
+            valB = new Date(b.createdAt).getTime();
+            break;
+          case 'syncStatus':
+            valA = a.syncStatus === 'SYNCED' ? 'sincronizado' : 'pendiente';
+            valB = b.syncStatus === 'SYNCED' ? 'sincronizado' : 'pendiente';
+            break;
+        }
+        
+        if (valA < valB) return docSortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return docSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [signedDocuments, docSearchTerm, docSortConfig]);
+
+  const docTotalPages = Math.ceil(filteredAndSortedDocs.length / docItemsPerPage);
+  const docCurrentData = filteredAndSortedDocs.slice((docCurrentPage - 1) * docItemsPerPage, docCurrentPage * docItemsPerPage);
+
+  const filteredEmployees = React.useMemo(() => {
+    let result = employees.filter(e => e.role !== 'ADMIN');
+    if (empSearchTerm) {
+      const lowerSearch = empSearchTerm.toLowerCase();
+      result = result.filter(emp => 
+        (emp.name || '').toLowerCase().includes(lowerSearch) ||
+        (emp.document || emp.doc || '').toLowerCase().includes(lowerSearch) ||
+        (emp.position || emp.role || '').toLowerCase().includes(lowerSearch)
+      );
+    }
+    return result;
+  }, [employees, empSearchTerm]);
+
+  const empTotalPages = Math.ceil(filteredEmployees.length / empItemsPerPage);
+  const empCurrentData = filteredEmployees.slice((empCurrentPage - 1) * empItemsPerPage, empCurrentPage * empItemsPerPage);
+
+  const filteredAdmins = React.useMemo(() => {
+    let result = employees.filter(e => e.role === 'ADMIN');
+    if (adminSearchTerm) {
+      const lowerSearch = adminSearchTerm.toLowerCase();
+      result = result.filter(emp => 
+        (emp.name || '').toLowerCase().includes(lowerSearch) ||
+        (emp.document || emp.doc || '').toLowerCase().includes(lowerSearch) ||
+        (emp.position || emp.role || '').toLowerCase().includes(lowerSearch)
+      );
+    }
+    return result;
+  }, [employees, adminSearchTerm]);
+
+  const adminTotalPages = Math.ceil(filteredAdmins.length / adminItemsPerPage);
+  const adminCurrentData = filteredAdmins.slice((adminCurrentPage - 1) * adminItemsPerPage, adminCurrentPage * adminItemsPerPage);
 
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
@@ -189,6 +319,7 @@ export default function App() {
       type: selectedFieldType,
       label: fieldLabel,
       required: fieldRequired,
+      hideInPdf: fieldHideInPdf,
       columns: selectedFieldType === 'table' ? tableCols.split(',').map(c => c.trim()).filter(Boolean) : undefined,
       options: selectedFieldType === 'dropdown' ? dropdownOptions.split(',').map(o => o.trim()).filter(Boolean) : undefined,
       category: fieldCategory.trim() || 'General'
@@ -210,6 +341,7 @@ export default function App() {
     setFieldLabel('');
     setTableCols('');
     setDropdownOptions('');
+    setFieldHideInPdf(false);
   };
 
   const editField = (field: TemplateField) => {
@@ -217,6 +349,7 @@ export default function App() {
     setFieldLabel(field.label);
     setSelectedFieldType(field.type);
     setFieldRequired(field.required);
+    setFieldHideInPdf(field.hideInPdf || false);
     setFieldCategory(field.category || 'General');
     setTableCols(field.columns?.join(', ') || '');
     setDropdownOptions(field.options?.join(', ') || '');
@@ -366,14 +499,18 @@ export default function App() {
       theme={theme}
       toggleTheme={toggleTheme}
       onLogout={handleLogout}
+      companySettings={companySettings}
     >
       
       {/* RENDER DASHBOARD TAB */}
       {currentTab === 'dashboard' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Dashboard General</h1>
-            <p className="text-muted-foreground">Monitoreo y resumen de la operación de ESE Norte 3.</p>
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Dashboard General</h1>
+              <p className="text-muted-foreground">Monitoreo y resumen de la operación de ESE Norte 3.</p>
+            </div>
+            <RefreshButton />
           </div>
 
           {/* Stats Cards (Copied the clean tech look from ispgo) */}
@@ -440,23 +577,34 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/60 text-xs">
-                    {signedDocuments.map((doc) => (
+                    {signedDocuments.slice(0, 5).map((doc) => (
                       <tr key={doc.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-6 py-4 font-medium text-foreground">{doc.templateName}</td>
-                        <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy}</td>
-                        <td className="px-6 py-4 text-muted-foreground">{doc.date}</td>
+                        <td className="px-6 py-4 font-medium text-foreground">{doc.template?.name || 'Documento'}</td>
+                        <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy || 'Empleado'}</td>
+                        <td className="px-6 py-4 text-muted-foreground">{new Date(doc.createdAt).toLocaleString()}</td>
                         <td className="px-6 py-4">
                           <span className={`px-2 py-0.5 rounded-full font-medium ${
-                            doc.syncStatus === 'Sincronizado' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                            doc.syncStatus === 'SYNCED' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
                           }`}>
-                            {doc.syncStatus}
+                            {doc.syncStatus === 'SYNCED' ? 'Sincronizado' : (doc.syncStatus === 'PENDING' || doc.syncStatus?.toLowerCase() === 'pending' ? 'Pendiente' : doc.syncStatus)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button className="p-1 rounded hover:bg-muted text-primary hover:text-accent mr-1">
+                          <button 
+                            onClick={() => setDocumentModal(doc)}
+                            className="p-1 rounded hover:bg-muted text-primary hover:text-accent mr-1"
+                            title="Ver Contenido"
+                          >
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
+                          <button 
+                            onClick={() => {
+                              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+                              window.open(`${baseUrl}/uploads/${doc.filePath}`, '_blank');
+                            }}
+                            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                            title="Descargar PDF"
+                          >
                             <FileDown className="h-4 w-4" />
                           </button>
                         </td>
@@ -534,6 +682,7 @@ export default function App() {
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">DocBuilder - Creador de Plantillas</h1>
               <p className="text-muted-foreground">Diseña formularios dinámicos que tus trabajadores diligenciarán en las tablets.</p>
             </div>
+            <RefreshButton />
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
@@ -635,15 +784,27 @@ export default function App() {
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Configuración</label>
-                    <div className="flex items-center h-9">
-                      <input 
-                        type="checkbox" 
-                        id="req"
-                        checked={fieldRequired}
-                        onChange={(e) => setFieldRequired(e.target.checked)}
-                        className="rounded border-border text-primary focus:ring-primary h-4 w-4"
-                      />
-                      <label htmlFor="req" className="ml-2 text-xs text-muted-foreground cursor-pointer select-none">¿Es Obligatorio?</label>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+                      <div className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          id="req"
+                          checked={fieldRequired}
+                          onChange={(e) => setFieldRequired(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                        />
+                        <label htmlFor="req" className="ml-2 text-xs text-muted-foreground cursor-pointer select-none">¿Obligatorio?</label>
+                      </div>
+                      <div className="flex items-center">
+                        <input 
+                          type="checkbox" 
+                          id="hidePdf"
+                          checked={fieldHideInPdf}
+                          onChange={(e) => setFieldHideInPdf(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                        />
+                        <label htmlFor="hidePdf" className="ml-2 text-xs text-muted-foreground cursor-pointer select-none" title="Si se marca, este dato no se listará en la parte inferior del PDF, útil si solo se usa como variable en el texto superior">Ocultar datos en PDF</label>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -730,6 +891,7 @@ export default function App() {
                                 <span className="text-xs font-semibold text-foreground">{field.label}</span>
                                 <span className="ml-2 text-[10px] bg-secondary/10 text-muted-foreground border border-border/80 px-2 py-0.5 rounded-full capitalize">{field.type}</span>
                                 {field.required && <span className="ml-1 text-[10px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full">Requerido</span>}
+                                {field.hideInPdf && <span className="ml-1 text-[10px] bg-muted/50 text-muted-foreground border border-border/80 px-2 py-0.5 rounded-full" title="No se mostrará en los datos del PDF">Oculto PDF</span>}
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
@@ -982,27 +1144,49 @@ export default function App() {
       )}
 
       {currentTab === 'explorer' && (
-        <FileExplorer templates={templates} signedDocuments={signedDocuments} folders={folders} />
+        <FileExplorer 
+          templates={templates} 
+          signedDocuments={signedDocuments} 
+          folders={folders} 
+          onRefresh={fetchData}
+          isRefreshing={isRefreshing}
+        />
       )}
 
       {/* RENDER EMPLOYEES TAB */}
       {currentTab === 'users' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
             <div>
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Gestión de Empleados</h1>
               <p className="text-muted-foreground">Administra los usuarios con rol de empleado que acceden desde las tablets.</p>
             </div>
-            <button 
-              onClick={() => {
-                setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
-                setIsEmployeeModalOpen(true);
-              }}
-              className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo Empleado
-            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+              <RefreshButton />
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar empleado..." 
+                  value={empSearchTerm}
+                  onChange={(e) => {
+                    setEmpSearchTerm(e.target.value);
+                    setEmpCurrentPage(1);
+                  }}
+                  className="w-full text-xs pl-9 pr-4 py-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
+                  setIsEmployeeModalOpen(true);
+                }}
+                className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5 w-full sm:w-auto justify-center"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo Empleado
+              </button>
+            </div>
           </div>
 
           {isEmployeeModalOpen && (
@@ -1087,59 +1271,93 @@ export default function App() {
             </div>
           )}
 
-          <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border/80 text-xs font-semibold text-muted-foreground bg-muted/30">
-                  <th className="px-6 py-3.5">Nombre Completo</th>
-                  <th className="px-6 py-3.5">Cédula / Documento</th>
-                  <th className="px-6 py-3.5">Cargo / Rol</th>
-                  <th className="px-6 py-3.5">Estado</th>
-                  <th className="px-6 py-3.5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60 text-xs">
-                {employees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-6 py-4 font-medium text-foreground">{emp.name}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.document || emp.doc}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{emp.position || emp.role}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${
-                        emp.status === 'Activo' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                      }`}>
-                        {emp.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => {
-                          setNewEmployee({
-                            id: emp.id,
-                            name: emp.name,
-                            document: emp.document || emp.doc || '',
-                            pin: '',
-                            position: emp.position || '',
-                            status: emp.status || 'Activo',
-                            role: emp.role || 'EMPLOYEE'
-                          });
-                          setIsEmployeeModalOpen(true);
-                        }}
-                        className="p-1 rounded hover:bg-muted text-primary mr-1"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button 
-                        onClick={() => setEmployeeToDelete(emp)}
-                        className="p-1 rounded hover:bg-muted text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
+          <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border/80 text-xs font-semibold text-muted-foreground bg-muted/30">
+                    <th className="px-6 py-3.5">Nombre Completo</th>
+                    <th className="px-6 py-3.5">Cédula / Documento</th>
+                    <th className="px-6 py-3.5">Cargo / Rol</th>
+                    <th className="px-6 py-3.5">Estado</th>
+                    <th className="px-6 py-3.5 text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border/60 text-xs">
+                  {empCurrentData.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                        No se encontraron empleados
+                      </td>
+                    </tr>
+                  ) : empCurrentData.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
+                      <td className="px-6 py-4 font-medium text-foreground">{emp.name}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{emp.document || emp.doc}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{emp.position || emp.role}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          emp.status === 'Activo' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                        }`}>
+                          {emp.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => {
+                            setNewEmployee({
+                              id: emp.id,
+                              name: emp.name,
+                              document: emp.document || emp.doc || '',
+                              pin: '',
+                              position: emp.position || '',
+                              status: emp.status || 'Activo',
+                              role: emp.role || 'EMPLOYEE'
+                            });
+                            setIsEmployeeModalOpen(true);
+                          }}
+                          className="p-1 rounded hover:bg-muted text-primary mr-1"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => setEmployeeToDelete(emp)}
+                          className="p-1 rounded hover:bg-muted text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {filteredEmployees.length > 0 && (
+              <div className="border-t border-border p-4 flex items-center justify-between text-xs text-muted-foreground">
+                <div>
+                  Mostrando {(empCurrentPage - 1) * empItemsPerPage + 1} a {Math.min(empCurrentPage * empItemsPerPage, filteredEmployees.length)} de {filteredEmployees.length}
+                </div>
+                <div className="flex gap-1 items-center">
+                  <span className="mr-2">Página {empCurrentPage} de {Math.max(1, empTotalPages)}</span>
+                  <button 
+                    disabled={empCurrentPage <= 1}
+                    onClick={() => setEmpCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button 
+                    disabled={empCurrentPage >= empTotalPages}
+                    onClick={() => setEmpCurrentPage(prev => Math.min(empTotalPages, prev + 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {employeeToDelete && (
@@ -1177,10 +1395,13 @@ export default function App() {
               <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Gestión de Remitentes</h1>
               <p className="text-muted-foreground">Empresas o entidades asociadas que solicitan o despachan los documentos.</p>
             </div>
-            <button className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5">
-              <Plus className="h-4 w-4" />
-              Nuevo Remitente
-            </button>
+            <div className="flex items-center gap-3">
+              <RefreshButton />
+              <button className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5">
+                <Plus className="h-4 w-4" />
+                Nuevo Remitente
+              </button>
+            </div>
           </div>
 
           <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
@@ -1214,48 +1435,355 @@ export default function App() {
       {/* RENDER DOCUMENTS TAB */}
       {currentTab === 'documents' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Documentos Diligenciados</h1>
-            <p className="text-muted-foreground">Historial y firma digital de todos los documentos llenados por los empleados.</p>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Documentos Diligenciados</h1>
+              <p className="text-muted-foreground">Historial y firma digital de todos los documentos llenados por los empleados.</p>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+              <RefreshButton />
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar documento..." 
+                  value={docSearchTerm}
+                  onChange={(e) => {
+                    setDocSearchTerm(e.target.value);
+                    setDocCurrentPage(1);
+                  }}
+                  className="w-full text-xs pl-9 pr-4 py-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border/80 text-xs font-semibold text-muted-foreground bg-muted/30">
-                  <th className="px-6 py-3.5">Documento</th>
-                  <th className="px-6 py-3.5">Empleado Responsable</th>
-                  <th className="px-6 py-3.5">Fecha de Envío</th>
-                  <th className="px-6 py-3.5">Estado en Servidor</th>
-                  <th className="px-6 py-3.5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60 text-xs">
-                {signedDocuments.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-6 py-4 font-medium text-foreground">{doc.templateName}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{doc.date}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${
-                        doc.syncStatus === 'Sincronizado' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-600'
-                      }`}>
-                        {doc.syncStatus}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-1.5 rounded hover:bg-muted text-primary hover:text-accent mr-1">
-                        <Eye className="h-4 w-4" />
-                      </button>
-                      <button className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-                        <FileDown className="h-4 w-4" />
-                      </button>
-                    </td>
+          <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border/80 text-xs font-semibold text-muted-foreground bg-muted/30">
+                    <th className="px-6 py-3.5 cursor-pointer hover:bg-muted/50" onClick={() => handleDocSort('templateName')}>
+                      <div className="flex items-center gap-1">Documento {docSortConfig?.key === 'templateName' && (docSortConfig.direction === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>)}</div>
+                    </th>
+                    <th className="px-6 py-3.5 cursor-pointer hover:bg-muted/50" onClick={() => handleDocSort('filledBy')}>
+                      <div className="flex items-center gap-1">Empleado Responsable {docSortConfig?.key === 'filledBy' && (docSortConfig.direction === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>)}</div>
+                    </th>
+                    <th className="px-6 py-3.5 cursor-pointer hover:bg-muted/50" onClick={() => handleDocSort('createdAt')}>
+                      <div className="flex items-center gap-1">Fecha de Envío {docSortConfig?.key === 'createdAt' && (docSortConfig.direction === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>)}</div>
+                    </th>
+                    <th className="px-6 py-3.5 cursor-pointer hover:bg-muted/50" onClick={() => handleDocSort('syncStatus')}>
+                      <div className="flex items-center gap-1">Estado en Servidor {docSortConfig?.key === 'syncStatus' && (docSortConfig.direction === 'asc' ? <ChevronUp className="h-3 w-3"/> : <ChevronDown className="h-3 w-3"/>)}</div>
+                    </th>
+                    <th className="px-6 py-3.5 text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border/60 text-xs">
+                  {docCurrentData.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                        No se encontraron documentos
+                      </td>
+                    </tr>
+                  ) : docCurrentData.map((doc) => (
+                    <tr key={doc.id} className="hover:bg-muted/10 transition-colors">
+                      <td className="px-6 py-4 font-medium text-foreground">{doc.template?.name || 'Documento'}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{doc.filledBy?.name || doc.filledBy || 'Empleado'}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{new Date(doc.createdAt).toLocaleString()}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          doc.syncStatus === 'SYNCED' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-600'
+                        }`}>
+                          {doc.syncStatus === 'SYNCED' ? 'Sincronizado' : (doc.syncStatus === 'PENDING' || doc.syncStatus?.toLowerCase() === 'pending' ? 'Pendiente' : doc.syncStatus)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => setDocumentModal(doc)}
+                          className="p-1.5 rounded hover:bg-muted text-primary hover:text-accent mr-1"
+                          title="Ver Contenido"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+                            window.open(`${baseUrl}/uploads/${doc.filePath}`, '_blank');
+                          }}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                          title="Descargar PDF"
+                        >
+                          <FileDown className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {filteredAndSortedDocs.length > 0 && (
+              <div className="border-t border-border p-4 flex items-center justify-between text-xs text-muted-foreground">
+                <div>
+                  Mostrando {(docCurrentPage - 1) * docItemsPerPage + 1} a {Math.min(docCurrentPage * docItemsPerPage, filteredAndSortedDocs.length)} de {filteredAndSortedDocs.length}
+                </div>
+                <div className="flex gap-1 items-center">
+                  <span className="mr-2">Página {docCurrentPage} de {Math.max(1, docTotalPages)}</span>
+                  <button 
+                    disabled={docCurrentPage <= 1}
+                    onClick={() => setDocCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button 
+                    disabled={docCurrentPage >= docTotalPages}
+                    onClick={() => setDocCurrentPage(prev => Math.min(docTotalPages, prev + 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* RENDER ADMINS TAB */}
+      {currentTab === 'admins' && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">Usuarios (Admins)</h1>
+              <p className="text-muted-foreground">Administra los usuarios con rol de administrador que acceden a este panel web.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+              <RefreshButton />
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar administrador..." 
+                  value={adminSearchTerm}
+                  onChange={(e) => {
+                    setAdminSearchTerm(e.target.value);
+                    setAdminCurrentPage(1);
+                  }}
+                  className="w-full text-xs pl-9 pr-4 py-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: 'Administrador', status: 'Activo', role: 'ADMIN' });
+                  setIsEmployeeModalOpen(true);
+                }}
+                className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5 w-full sm:w-auto justify-center"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo Administrador
+              </button>
+            </div>
+          </div>
+
+          {/* Se reutiliza el isEmployeeModalOpen pero se configuran los textos si el role es ADMIN */}
+          {isEmployeeModalOpen && newEmployee.role === 'ADMIN' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-card w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
+                  <h3 className="font-semibold text-foreground">{newEmployee.id ? 'Editar' : 'Crear Nuevo'} Administrador</h3>
+                  <button onClick={() => setIsEmployeeModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <form onSubmit={saveEmployee}>
+                  <div className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Nombre Completo</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newEmployee.name}
+                        onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Cédula / Documento</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={newEmployee.document}
+                        onChange={(e) => setNewEmployee({...newEmployee, document: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Contraseña (PIN) {newEmployee.id ? '(Dejar vacío para no cambiar)' : ''}</label>
+                      <input 
+                        type="password" 
+                        required={!newEmployee.id}
+                        value={newEmployee.pin}
+                        onChange={(e) => setNewEmployee({...newEmployee, pin: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Cargo</label>
+                      <input 
+                        type="text" 
+                        value={newEmployee.position}
+                        onChange={(e) => setNewEmployee({...newEmployee, position: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                      <select 
+                        value={newEmployee.status}
+                        onChange={(e) => setNewEmployee({...newEmployee, status: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      >
+                        <option value="Activo">Activo</option>
+                        <option value="Inactivo">Inactivo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="px-6 py-4 border-t border-border bg-muted/10 flex justify-end gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsEmployeeModalOpen(false)}
+                      className="px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted rounded-lg"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="submit"
+                      className="px-4 py-2 text-xs font-medium bg-primary text-white hover:bg-primary/95 rounded-lg"
+                    >
+                      Guardar Administrador
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border/80 text-xs font-semibold text-muted-foreground bg-muted/30">
+                    <th className="px-6 py-3.5">Nombre Completo</th>
+                    <th className="px-6 py-3.5">Cédula / Documento</th>
+                    <th className="px-6 py-3.5">Cargo / Rol</th>
+                    <th className="px-6 py-3.5">Estado</th>
+                    <th className="px-6 py-3.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60 text-xs">
+                  {adminCurrentData.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">
+                        No se encontraron administradores
+                      </td>
+                    </tr>
+                  ) : adminCurrentData.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-muted/10 transition-colors">
+                      <td className="px-6 py-4 font-medium text-foreground">{emp.name}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{emp.document || emp.doc}</td>
+                      <td className="px-6 py-4 text-muted-foreground">{emp.position || emp.role}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          emp.status === 'Activo' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                        }`}>
+                          {emp.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => {
+                            setNewEmployee({
+                              id: emp.id,
+                              name: emp.name,
+                              document: emp.document || emp.doc || '',
+                              pin: '',
+                              position: emp.position || '',
+                              status: emp.status || 'Activo',
+                              role: emp.role || 'ADMIN'
+                            });
+                            setIsEmployeeModalOpen(true);
+                          }}
+                          className="p-1 rounded hover:bg-muted text-primary mr-1"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button 
+                          onClick={() => setEmployeeToDelete(emp)}
+                          className="p-1 rounded hover:bg-muted text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {filteredAdmins.length > 0 && (
+              <div className="border-t border-border p-4 flex items-center justify-between text-xs text-muted-foreground">
+                <div>
+                  Mostrando {(adminCurrentPage - 1) * adminItemsPerPage + 1} a {Math.min(adminCurrentPage * adminItemsPerPage, filteredAdmins.length)} de {filteredAdmins.length}
+                </div>
+                <div className="flex gap-1 items-center">
+                  <span className="mr-2">Página {adminCurrentPage} de {Math.max(1, adminTotalPages)}</span>
+                  <button 
+                    disabled={adminCurrentPage <= 1}
+                    onClick={() => setAdminCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button 
+                    disabled={adminCurrentPage >= adminTotalPages}
+                    onClick={() => setAdminCurrentPage(prev => Math.min(adminTotalPages, prev + 1))}
+                    className="p-1.5 rounded border border-border hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {employeeToDelete && employeeToDelete.role === 'ADMIN' && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-card w-full max-w-sm rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 p-6">
+                <h3 className="font-semibold text-lg text-foreground mb-2">Eliminar Administrador</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  ¿Estás seguro de que deseas eliminar a <strong>{employeeToDelete.name}</strong>? Esta acción no se puede deshacer.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button 
+                    onClick={() => setEmployeeToDelete(null)}
+                    className="px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={confirmDeleteEmployee}
+                    className="px-4 py-2 text-xs font-medium bg-red-600 text-white hover:bg-red-700 rounded-lg"
+                  >
+                    Sí, Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1302,6 +1830,37 @@ export default function App() {
                     className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                   />
                 </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">País</label>
+                    <input 
+                      type="text" 
+                      value={companySettings.country}
+                      onChange={(e) => setCompanySettings(prev => ({ ...prev, country: e.target.value }))}
+                      className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Departamento</label>
+                    <input 
+                      type="text" 
+                      value={companySettings.department}
+                      onChange={(e) => setCompanySettings(prev => ({ ...prev, department: e.target.value }))}
+                      className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Sede</label>
+                  <input 
+                    type="text" 
+                    value={companySettings.branch}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, branch: e.target.value }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                  />
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -1336,17 +1895,36 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Logo Simulator */}
+                {/* Logo Uploader */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Logotipo de la Empresa</label>
-                  <div className="border border-dashed border-border rounded-lg p-4 bg-muted/10 text-center flex flex-col items-center justify-center gap-2">
-                    <div className="w-12 h-12 bg-primary/10 text-primary flex items-center justify-center rounded-lg shadow-sm border border-primary/20">
-                      <span className="font-bold text-xs">ESE</span>
+                  <label className="border border-dashed border-border rounded-lg p-4 bg-muted/10 text-center flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-muted/30 transition-colors">
+                    {companySettings.logoUrl ? (
+                      <img src={companySettings.logoUrl} alt="Logo" className="max-h-16 object-contain" />
+                    ) : (
+                      <div className="w-12 h-12 bg-primary/10 text-primary flex items-center justify-center rounded-lg shadow-sm border border-primary/20">
+                        <span className="font-bold text-xs">ESE</span>
+                      </div>
+                    )}
+                    <div className="text-[10px] text-muted-foreground mt-2">
+                      <span className="text-primary font-semibold">Sube un archivo</span> o haz clic (PNG, JPG)
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      <span className="text-primary font-semibold cursor-pointer">Sube un archivo</span> o arrástralo aquí (PNG, JPG de 500x500px)
-                    </div>
-                  </div>
+                    <input 
+                      type="file" 
+                      accept="image/png, image/jpeg" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setCompanySettings(prev => ({ ...prev, logoUrl: reader.result as string }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
                 </div>
 
               </div>
@@ -1510,6 +2088,114 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Content Modal (Global para todas las vistas) */}
+      {documentModal && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-card w-full max-w-3xl rounded-xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h3 className="font-bold text-foreground truncate max-w-[80%]">{documentModal.template?.name || 'Documento'}</h3>
+              <button onClick={() => setDocumentModal(null)} className="p-1 hover:bg-muted text-muted-foreground rounded-md transition-colors hover:text-foreground"><X className="h-5 w-5" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Header (Datos Empresa similar a mobile app) */}
+              <div className="flex border-b border-border pb-4 mb-4">
+                <div className="w-12 h-12 bg-primary rounded-lg flex justify-center items-center mr-3 shadow-md shadow-primary/20">
+                  <span className="text-white font-bold text-[10px] text-center leading-tight">ESE<br/>Norte 3</span>
+                </div>
+                <div className="flex flex-col justify-center">
+                  <span className="font-bold text-foreground leading-tight text-lg">ESE Norte 3</span>
+                  <span className="text-xs text-muted-foreground">Documento Histórico Diligenciado</span>
+                </div>
+              </div>
+              
+              {/* Descripción con Variables Reemplazadas */}
+              {(() => {
+                const description = documentModal.template?.description;
+                if (!description) return null;
+                const data = documentModal.data || {};
+                const fields = documentModal.template?.fields || [];
+                
+                const replaced = description.replace(/\{\{([^}]+)\}\}/g, (match: string, key: string) => {
+                  const cleanKey = key.trim();
+                  let val = data[cleanKey];
+                  if (!val) {
+                    const field = fields.find((f: any) => f.label === cleanKey);
+                    if (field) {
+                      val = data[field.id];
+                    }
+                  }
+                  return val ? val.toString() : match;
+                });
+                return (
+                  <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+                    <p className="text-sm text-primary/80 font-medium leading-relaxed italic text-justify">
+                      {replaced}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {/* Renderizar campos iterando la data */}
+              <div className="space-y-4">
+                {Object.keys(documentModal.data || {}).map((key: string) => {
+                  const val = documentModal.data[key];
+                  const fieldDef = (documentModal.template?.fields || []).find((f: any) => f.id === key);
+                  const fieldLabel = fieldDef ? fieldDef.label : key;
+                  
+                  const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
+
+                  return (
+                    <div key={key} className="space-y-1">
+                      <span className="text-xs font-semibold text-muted-foreground">{fieldLabel}</span>
+                      {isMedia ? (
+                        <div className="border border-border rounded-lg overflow-hidden flex justify-center bg-muted/20 p-2">
+                           <img src={val} alt="media" className="max-h-40 object-contain rounded-md" />
+                        </div>
+                      ) : Array.isArray(val) ? (
+                        <div className="overflow-x-auto border border-border rounded-lg mt-1">
+                          <table className="w-full text-xs text-left">
+                            <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                              <tr>
+                                {Object.keys(val[0] || {}).map((col, i) => (
+                                  <th key={i} className="p-2">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {val.map((row, i) => (
+                                <tr key={i} className="bg-card">
+                                  {Object.values(row).map((cell: any, j) => (
+                                    <td key={j} className="p-2">{cell}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-lg border border-border bg-muted/10 text-sm text-foreground">
+                          {val?.toString() || 'Sin respuesta'}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-border flex justify-end">
+              <button 
+                onClick={() => setDocumentModal(null)}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary/95 transition-colors"
+              >
+                Cerrar Visualizador
+              </button>
             </div>
           </div>
         </div>
