@@ -1160,25 +1160,96 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
               {(() => {
                 const description = contentModalNode.rawDoc.template?.description;
                 if (!description) return null;
-                const data = contentModalNode.rawDoc.data || {};
+                const data = { ...contentModalNode.rawDoc.data };
                 const fields = contentModalNode.rawDoc.template?.fields || [];
                 
-                const replaced = description.replace(/\{\{([^}]+)\}\}/g, (match: string, key: string) => {
-                  const cleanKey = key.trim();
-                  let val = data[cleanKey];
-                  if (!val) {
-                    const field = fields.find((f: any) => f.label === cleanKey);
-                    if (field) {
-                      val = data[field.id];
+                // 1. Resolve select labels
+                Object.keys(data).forEach(key => {
+                  const fieldDef = fields.find((f: any) => f.id === key);
+                  if (fieldDef && fieldDef.type === 'select') {
+                    const option = fieldDef.options?.find((o: any) => String(o.id) === String(data[key]) || String(o.value) === String(data[key]));
+                    if (option) {
+                      data[key] = option.label || option.value;
                     }
                   }
-                  return val ? val.toString() : match;
                 });
+
+                // 2. Build blocks
+                let formattedDescription = description;
+                const blockTokens: any[] = [];
+                Object.keys(data).forEach(key => {
+                  const fieldDef = fields.find((f: any) => f.id === key);
+                  if (fieldDef && fieldDef.label) {
+                    const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
+                    const value = data[key];
+                    if (typeof value === 'string' && value.startsWith('data:image/')) {
+                       const placeholder = `__IMAGE_BLOCK_${key}__`;
+                       if (regex.test(formattedDescription)) {
+                         formattedDescription = formattedDescription.replace(regex, placeholder);
+                         blockTokens.push({ placeholder, type: 'image', value });
+                       }
+                    } else if (Array.isArray(value)) {
+                       const placeholder = `__TABLE_BLOCK_${key}__`;
+                       if (regex.test(formattedDescription)) {
+                         formattedDescription = formattedDescription.replace(regex, placeholder);
+                         blockTokens.push({ placeholder, type: 'table', value });
+                       }
+                    } else {
+                       formattedDescription = formattedDescription.replace(regex, String(value));
+                    }
+                  }
+                });
+
+                let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
+                blockTokens.forEach(block => {
+                  let newFinalBlocks: any[] = [];
+                  finalBlocks.forEach(fb => {
+                    if (fb.type === 'text') {
+                       const parts = fb.content.split(block.placeholder);
+                       parts.forEach((part: string, idx: number) => {
+                         if (part) newFinalBlocks.push({ type: 'text', content: part });
+                         if (idx < parts.length - 1) newFinalBlocks.push(block);
+                       });
+                    } else {
+                       newFinalBlocks.push(fb);
+                    }
+                  });
+                  finalBlocks = newFinalBlocks;
+                });
+
                 return (
                   <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                    <p className="text-sm text-primary/80 font-medium leading-relaxed italic text-justify">
-                      {replaced}
-                    </p>
+                    <div className="text-sm text-primary/80 font-medium leading-relaxed text-justify space-y-4">
+                      {finalBlocks.map((block, i) => {
+                        if (block.type === 'text') {
+                          return <span key={i} className="whitespace-pre-wrap">{block.content}</span>;
+                        } else if (block.type === 'image') {
+                          return <img key={i} src={block.value} alt="Variable Image" className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
+                        } else if (block.type === 'table') {
+                           if (block.value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
+                           const cols = Object.keys(block.value[0]);
+                           return (
+                             <div key={i} className="overflow-x-auto my-2 border border-border/40 rounded-md bg-white">
+                               <table className="w-full text-sm text-left">
+                                 <thead className="bg-muted text-muted-foreground uppercase text-xs">
+                                   <tr>
+                                     {cols.map(c => <th key={c} className="px-4 py-2 border-b border-border/40">{c}</th>)}
+                                   </tr>
+                                 </thead>
+                                 <tbody>
+                                   {block.value.map((r: any, rIdx: number) => (
+                                     <tr key={rIdx} className="border-b border-border/20 last:border-0 hover:bg-muted/50">
+                                       {cols.map(c => <td key={c} className="px-4 py-2">{String(r[c] || '')}</td>)}
+                                     </tr>
+                                   ))}
+                                 </tbody>
+                               </table>
+                             </div>
+                           );
+                        }
+                        return null;
+                      })}
+                    </div>
                   </div>
                 );
               })()}

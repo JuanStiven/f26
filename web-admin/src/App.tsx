@@ -58,10 +58,18 @@ export default function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
     if (token) {
       setIsAuthenticated(true);
+      if (userStr) {
+        try {
+          setCurrentUser(JSON.parse(userStr));
+        } catch (e) {}
+      }
     }
   }, []);
 
@@ -309,8 +317,14 @@ export default function App() {
     pin: '',
     position: '',
     status: 'Activo',
-    role: 'EMPLOYEE'
+    role: 'EMPLOYEE' as 'EMPLOYEE' | 'ADMIN'
   });
+
+  // Profile & Security Modals
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: '', email: '', position: '' });
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [securityForm, setSecurityForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
 
   const addFieldToTemplate = () => {
     if (!fieldLabel.trim()) return;
@@ -476,6 +490,42 @@ export default function App() {
     }
   };
 
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.put(`/employees/${currentUser.id}`, profileForm);
+      if (response.data.success) {
+        const updatedUser = { ...currentUser, ...response.data.data };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
+        setIsProfileModalOpen(false);
+        alert('Perfil actualizado con éxito');
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error al actualizar perfil');
+    }
+  };
+
+  const saveSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (securityForm.newPassword !== securityForm.confirmPassword) {
+      alert('Las contraseñas no coinciden');
+      return;
+    }
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.put(`/employees/${currentUser.id}`, { pin: securityForm.newPassword });
+      if (response.data.success) {
+        setIsSecurityModalOpen(false);
+        setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        alert('Contraseña actualizada con éxito');
+      }
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error al actualizar contraseña');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -500,6 +550,25 @@ export default function App() {
       toggleTheme={toggleTheme}
       onLogout={handleLogout}
       companySettings={companySettings}
+      currentUser={currentUser}
+      onProfileClick={() => {
+        setProfileForm({ 
+          name: currentUser?.name || '', 
+          email: currentUser?.email || '', 
+          position: currentUser?.position || '' 
+        });
+        setIsProfileModalOpen(true);
+      }}
+      onSecurityClick={() => {
+        setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setIsSecurityModalOpen(true);
+      }}
+      notificationsData={signedDocuments.slice(0, 5).map(doc => ({
+        id: doc.id,
+        text: `Nuevo documento (${doc.template?.name || 'Plantilla'}) diligenciado por ${doc.filledBy?.name || doc.filledBy || 'Empleado'}`,
+        time: new Date(doc.createdAt).toLocaleDateString(),
+        read: false
+      }))}
     >
       
       {/* RENDER DASHBOARD TAB */}
@@ -2093,6 +2162,131 @@ export default function App() {
         </div>
       )}
 
+      {/* Profile Modal */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border flex justify-between items-center">
+              <h3 className="font-semibold text-foreground">Mi Perfil</h3>
+              <button onClick={() => setIsProfileModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={saveProfile} className="p-6 space-y-4">
+              <div className="flex flex-col items-center gap-4 mb-6">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-3xl font-semibold shadow-inner">
+                  {currentUser?.name ? currentUser.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() : 'U'}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Nombre Completo</label>
+                <input
+                  type="text"
+                  required
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Correo / Cédula</label>
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser?.document || currentUser?.email || ''}
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-muted-foreground focus:outline-none opacity-70 cursor-not-allowed"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Cargo / Posición</label>
+                <input
+                  type="text"
+                  required
+                  value={profileForm.position}
+                  onChange={(e) => setProfileForm({...profileForm, position: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-lg text-sm text-foreground hover:bg-muted transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/95 transition-colors"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Security Modal */}
+      {isSecurityModalOpen && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-border flex justify-between items-center">
+              <h3 className="font-semibold text-foreground">Seguridad (Cambio de Contraseña)</h3>
+              <button onClick={() => setIsSecurityModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={saveSecurity} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Contraseña Actual</label>
+                <input
+                  type="password"
+                  value={securityForm.currentPassword}
+                  onChange={(e) => setSecurityForm({...securityForm, currentPassword: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Nueva Contraseña</label>
+                <input
+                  type="password"
+                  required
+                  value={securityForm.newPassword}
+                  onChange={(e) => setSecurityForm({...securityForm, newPassword: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Confirmar Nueva Contraseña</label>
+                <input
+                  type="password"
+                  required
+                  value={securityForm.confirmPassword}
+                  onChange={(e) => setSecurityForm({...securityForm, confirmPassword: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSecurityModalOpen(false)}
+                  className="px-4 py-2 border border-border rounded-lg text-sm text-foreground hover:bg-muted transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/95 transition-colors"
+                >
+                  Actualizar Contraseña
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Content Modal (Global para todas las vistas) */}
       {documentModal && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
@@ -2118,25 +2312,96 @@ export default function App() {
               {(() => {
                 const description = documentModal.template?.description;
                 if (!description) return null;
-                const data = documentModal.data || {};
+                const data = { ...documentModal.data };
                 const fields = documentModal.template?.fields || [];
                 
-                const replaced = description.replace(/\{\{([^}]+)\}\}/g, (match: string, key: string) => {
-                  const cleanKey = key.trim();
-                  let val = data[cleanKey];
-                  if (!val) {
-                    const field = fields.find((f: any) => f.label === cleanKey);
-                    if (field) {
-                      val = data[field.id];
+                // 1. Resolve select labels
+                Object.keys(data).forEach(key => {
+                  const fieldDef = fields.find((f: any) => f.id === key);
+                  if (fieldDef && fieldDef.type === 'select') {
+                    const option = fieldDef.options?.find((o: any) => String(o.id) === String(data[key]) || String(o.value) === String(data[key]));
+                    if (option) {
+                      data[key] = option.label || option.value;
                     }
                   }
-                  return val ? val.toString() : match;
                 });
+
+                // 2. Build blocks
+                let formattedDescription = description;
+                const blockTokens: any[] = [];
+                Object.keys(data).forEach(key => {
+                  const fieldDef = fields.find((f: any) => f.id === key);
+                  if (fieldDef && fieldDef.label) {
+                    const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
+                    const value = data[key];
+                    if (typeof value === 'string' && value.startsWith('data:image/')) {
+                       const placeholder = `__IMAGE_BLOCK_${key}__`;
+                       if (regex.test(formattedDescription)) {
+                         formattedDescription = formattedDescription.replace(regex, placeholder);
+                         blockTokens.push({ placeholder, type: 'image', value });
+                       }
+                    } else if (Array.isArray(value)) {
+                       const placeholder = `__TABLE_BLOCK_${key}__`;
+                       if (regex.test(formattedDescription)) {
+                         formattedDescription = formattedDescription.replace(regex, placeholder);
+                         blockTokens.push({ placeholder, type: 'table', value });
+                       }
+                    } else {
+                       formattedDescription = formattedDescription.replace(regex, String(value));
+                    }
+                  }
+                });
+
+                let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
+                blockTokens.forEach(block => {
+                  let newFinalBlocks: any[] = [];
+                  finalBlocks.forEach(fb => {
+                    if (fb.type === 'text') {
+                       const parts = fb.content.split(block.placeholder);
+                       parts.forEach((part: string, idx: number) => {
+                         if (part) newFinalBlocks.push({ type: 'text', content: part });
+                         if (idx < parts.length - 1) newFinalBlocks.push(block);
+                       });
+                    } else {
+                       newFinalBlocks.push(fb);
+                    }
+                  });
+                  finalBlocks = newFinalBlocks;
+                });
+
                 return (
                   <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                    <p className="text-sm text-primary/80 font-medium leading-relaxed italic text-justify">
-                      {replaced}
-                    </p>
+                    <div className="text-sm text-primary/80 font-medium leading-relaxed text-justify space-y-4">
+                      {finalBlocks.map((block, i) => {
+                        if (block.type === 'text') {
+                          return <span key={i} className="whitespace-pre-wrap">{block.content}</span>;
+                        } else if (block.type === 'image') {
+                          return <img key={i} src={block.value} alt="Variable Image" className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
+                        } else if (block.type === 'table') {
+                           if (block.value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
+                           const cols = Object.keys(block.value[0]);
+                           return (
+                             <div key={i} className="overflow-x-auto my-2 border border-border/40 rounded-md bg-white">
+                               <table className="w-full text-sm text-left">
+                                 <thead className="bg-muted text-muted-foreground uppercase text-xs">
+                                   <tr>
+                                     {cols.map(c => <th key={c} className="px-4 py-2 border-b border-border/40">{c}</th>)}
+                                   </tr>
+                                 </thead>
+                                 <tbody>
+                                   {block.value.map((r: any, rIdx: number) => (
+                                     <tr key={rIdx} className="border-b border-border/20 last:border-0 hover:bg-muted/50">
+                                       {cols.map(c => <td key={c} className="px-4 py-2">{String(r[c] || '')}</td>)}
+                                     </tr>
+                                   ))}
+                                 </tbody>
+                               </table>
+                             </div>
+                           );
+                        }
+                        return null;
+                      })}
+                    </div>
                   </div>
                 );
               })()}

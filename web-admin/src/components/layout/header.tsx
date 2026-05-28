@@ -15,16 +15,20 @@ interface HeaderProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   onLogout?: () => void;
+  currentUser?: any;
+  onProfileClick?: () => void;
+  onSecurityClick?: () => void;
+  notificationsData?: any[];
 }
 
-export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderProps) {
+export function Header({ onMenuToggle, theme, toggleTheme, onLogout, currentUser, onProfileClick, onSecurityClick, notificationsData = [] }: HeaderProps) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const notifications = [
-    { id: 1, text: 'Nuevo documento firmado por Juan Pérez', time: 'Hace 5 min', read: false },
-    { id: 2, text: 'Empleado "Carlos Gomez" registrado exitosamente', time: 'Hace 1 hora', read: true },
-  ];
+  // Generate initials
+  const initials = currentUser?.name 
+    ? currentUser.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()
+    : 'U';
 
   return (
     <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 relative z-20">
@@ -37,7 +41,7 @@ export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderPro
           <Menu className="h-5 w-5" />
         </button>
         <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider hidden sm:block">P26</h2>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider hidden sm:block">F26</h2>
         </div>
       </div>
 
@@ -69,20 +73,26 @@ export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderPro
               <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-lg shadow-lg py-2 z-20 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-2 border-b border-border font-semibold text-sm flex justify-between items-center">
                   <span>Notificaciones</span>
-                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">1 Nueva</span>
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{notificationsData.length} Recientes</span>
                 </div>
                 <div className="max-h-64 overflow-y-auto">
-                  {notifications.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className={`px-4 py-3 hover:bg-muted/50 border-b border-border/50 cursor-pointer flex flex-col gap-0.5 transition-colors ${
-                        !n.read ? 'bg-primary/5' : ''
-                      }`}
-                    >
-                      <span className="text-xs font-medium text-foreground">{n.text}</span>
-                      <span className="text-[10px] text-muted-foreground">{n.time}</span>
+                  {notificationsData.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                      No tienes notificaciones
                     </div>
-                  ))}
+                  ) : (
+                    notificationsData.map((n) => (
+                      <div 
+                        key={n.id} 
+                        className={`px-4 py-3 hover:bg-muted/50 border-b border-border/50 cursor-pointer flex flex-col gap-0.5 transition-colors ${
+                          !n.read ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        <span className="text-xs font-medium text-foreground">{n.text}</span>
+                        <span className="text-[10px] text-muted-foreground">{n.time}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </>
@@ -99,11 +109,11 @@ export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderPro
             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-muted transition-colors text-left"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-xs font-semibold shadow-inner">
-              AD
+              {initials}
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="text-xs font-semibold leading-tight">Admin ESE</span>
-              <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">Administrador</span>
+              <span className="text-xs font-semibold leading-tight">{currentUser?.name || 'Admin'}</span>
+              <span className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">{currentUser?.role || 'Administrador'}</span>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:block" />
           </button>
@@ -113,14 +123,20 @@ export function Header({ onMenuToggle, theme, toggleTheme, onLogout }: HeaderPro
               <div className="fixed inset-0 z-10" onClick={() => setProfileOpen(false)} />
               <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-lg shadow-lg py-1.5 z-20 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="px-4 py-2 border-b border-border">
-                  <p className="text-xs font-semibold text-foreground">Administrador</p>
-                  <p className="text-[10px] text-muted-foreground truncate">admin@esenorte3.gov.co</p>
+                  <p className="text-xs font-semibold text-foreground">{currentUser?.name || 'Administrador'}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{currentUser?.email || 'admin@esenorte3.gov.co'}</p>
                 </div>
-                <button className="w-full flex items-center gap-2 px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors text-left">
+                <button 
+                  onClick={() => { setProfileOpen(false); onProfileClick?.(); }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors text-left"
+                >
                   <User className="h-4 w-4 text-muted-foreground" />
                   Mi Perfil
                 </button>
-                <button className="w-full flex items-center gap-2 px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors text-left">
+                <button 
+                  onClick={() => { setProfileOpen(false); onSecurityClick?.(); }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-foreground hover:bg-muted transition-colors text-left"
+                >
                   <Shield className="h-4 w-4 text-muted-foreground" />
                   Seguridad
                 </button>

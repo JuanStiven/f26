@@ -12,7 +12,8 @@ import {
   ScrollView,
   Alert,
   Modal,
-  Image
+  Image,
+  Linking
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
@@ -85,24 +86,21 @@ export default function App() {
   const totalDraftPages = Math.ceil(filteredDrafts.length / DRAFTS_PER_PAGE);
   const paginatedDrafts = filteredDrafts.slice((draftPage - 1) * DRAFTS_PER_PAGE, draftPage * DRAFTS_PER_PAGE);
 
-  // Offline Docs (Mock Data)
-  const [offlineDocs, setOfflineDocs] = useState<any[]>([
-    { id: '1', name: 'Insumos Rurales - Sede Norte', date: '26/05/2026', operator: 'Carlos Mario', status: '✓ Sincronizado' },
-    { id: '2', name: 'Mantenimiento Incubadora #3', date: '25/05/2026', operator: 'Carlos Mario', status: '⏳ Guardado Local' }
-  ]);
+  // Offline Docs
+  const [offlineDocs, setOfflineDocs] = useState<any[]>([]);
   const [offlineSearchTerm, setOfflineSearchTerm] = useState('');
   const [offlinePage, setOfflinePage] = useState(1);
   const OFFLINE_PER_PAGE = 5;
 
-  const filteredOffline = offlineDocs.filter(d => d.name.toLowerCase().includes(offlineSearchTerm.toLowerCase()));
+  const filteredOffline = offlineDocs.filter(d => (d.template?.name || '').toLowerCase().includes(offlineSearchTerm.toLowerCase()));
   const totalOfflinePages = Math.ceil(filteredOffline.length / OFFLINE_PER_PAGE);
   const paginatedOffline = filteredOffline.slice((offlinePage - 1) * OFFLINE_PER_PAGE, offlinePage * OFFLINE_PER_PAGE);
 
   React.useEffect(() => {
     if (isAuthenticated && userToken) {
       fetchTemplates();
-      fetchHistory();
       loadDrafts();
+      loadOfflineDocs();
     }
   }, [isAuthenticated, userToken]);
 
@@ -111,9 +109,82 @@ export default function App() {
       const storedDrafts = await AsyncStorage.getItem('@drafts_' + currentUser?.id);
       if (storedDrafts) {
         setDrafts(JSON.parse(storedDrafts));
+      } else {
+        setDrafts([]);
       }
     } catch (e) {
-      console.log('Error loading drafts', e);
+      console.error('Error loading drafts', e);
+    }
+  };
+
+  const loadOfflineDocs = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('@offline_docs_' + currentUser?.id);
+      if (stored) {
+        setOfflineDocs(JSON.parse(stored));
+      } else {
+        setOfflineDocs([]);
+      }
+    } catch (e) {
+      console.error('Error loading offline docs', e);
+    }
+  };
+
+  const saveOfflineDoc = async (doc: any) => {
+    try {
+      const newDocs = [doc, ...offlineDocs];
+      await AsyncStorage.setItem('@offline_docs_' + currentUser?.id, JSON.stringify(newDocs));
+      setOfflineDocs(newDocs);
+    } catch (e) {
+      console.error('Error saving offline doc', e);
+    }
+  };
+
+  const syncOfflineDocs = async () => {
+    if (offlineDocs.length === 0) {
+      Alert.alert('Info', 'No hay documentos pendientes por sincronizar.');
+      return;
+    }
+    
+    let successCount = 0;
+    const remainingDocs = [];
+    
+    for (const doc of offlineDocs) {
+      try {
+        const userToken = await AsyncStorage.getItem('@userToken');
+        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+        
+        const response = await fetch(`${API_URL}/documents`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${userToken}`
+          },
+          body: JSON.stringify({
+            templateId: doc.template.id,
+            formData: doc.data
+          })
+        });
+        
+        const resData = await response.json();
+        if (resData.success) {
+          successCount++;
+        } else {
+          remainingDocs.push(doc);
+        }
+      } catch (e) {
+        remainingDocs.push(doc);
+      }
+    }
+    
+    await AsyncStorage.setItem('@offline_docs_' + currentUser?.id, JSON.stringify(remainingDocs));
+    setOfflineDocs(remainingDocs);
+    
+    if (successCount > 0) {
+      Alert.alert('Sincronización', `Se sincronizaron ${successCount} documento(s) correctamente.`);
+      fetchHistory();
+    } else {
+      Alert.alert('Error', 'No se pudieron sincronizar los documentos. Verifica tu conexión.');
     }
   };
 
@@ -316,7 +387,25 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error saving document:', error);
-      Alert.alert('Error', 'No se pudo conectar con el servidor.');
+      Alert.alert('Modo Offline', 'No se pudo conectar con el servidor. El documento se ha guardado localmente y podrás sincronizarlo luego.');
+      
+      saveOfflineDoc({
+        id: Date.now().toString(),
+        template: selectedTemplate,
+        data: formData,
+        createdAt: new Date().toISOString(),
+        operator: currentUser?.name || 'Operario',
+        status: '⏳ Guardado Local'
+      });
+
+      if (activeDraftId) {
+        deleteDraft(activeDraftId);
+      }
+
+      setFormData({});
+      setSelectedTemplate(null);
+      setActiveDraftId(null);
+      setCurrentScreen('dashboard');
     }
   };
 
@@ -329,7 +418,7 @@ export default function App() {
     }
     
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.5,
       base64: true,
@@ -481,7 +570,7 @@ export default function App() {
 
             <View style={{ marginTop: 20, alignItems: 'center' }}>
               <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 'bold' }}>
-                © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo
+                © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo{"\n"}
               </Text>
             </View>
             
@@ -881,6 +970,9 @@ export default function App() {
                   <Text style={styles.backBtnText}>⬅️ Volver</Text>
                 </TouchableOpacity>
                 <Text style={styles.subViewTitle}>Documentos Locales</Text>
+                <TouchableOpacity onPress={loadOfflineDocs} style={{ padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8 }}>
+                  <Text style={{ fontSize: 16 }}>🔄</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={{ marginBottom: 15 }}>
@@ -902,10 +994,10 @@ export default function App() {
                   {paginatedOffline.map(doc => (
                     <View key={doc.id} style={styles.offlineDocItem}>
                       <View>
-                        <Text style={styles.offlineDocName}>{doc.name}</Text>
-                        <Text style={styles.offlineDocMeta}>Fecha: {doc.date} | Operario: {doc.operator}</Text>
+                        <Text style={styles.offlineDocName}>{doc.template?.name || 'Documento sin nombre'}</Text>
+                        <Text style={styles.offlineDocMeta}>Fecha: {new Date(doc.createdAt).toLocaleDateString()} | Operario: {doc.operator}</Text>
                       </View>
-                      <Text style={doc.status.includes('✓') ? styles.docSyncedText : styles.docPendingText}>{doc.status}</Text>
+                      <Text style={styles.docPendingText}>{doc.status || '⏳ Guardado Local'}</Text>
                     </View>
                   ))}
                   
@@ -927,7 +1019,7 @@ export default function App() {
               <TouchableOpacity 
                 style={[styles.syncButton, !isOnline && styles.buttonDisabled, { marginTop: 15 }]}
                 disabled={!isOnline}
-                onPress={() => Alert.alert('Sincronización', 'Sincronizando base de datos local con el servidor... ¡Completado!')}
+                onPress={syncOfflineDocs}
               >
                 <Text style={styles.syncButtonText}>
                   {isOnline ? '🔄 Sincronizar Cambios Ahora' : '🚫 Conéctate a Internet para Sincronizar'}
@@ -1064,6 +1156,21 @@ export default function App() {
                       >
                         <Text style={styles.fillBtnText}>Ver Contenido</Text>
                       </TouchableOpacity>
+                      {doc.filePath && (
+                        <TouchableOpacity 
+                          style={[styles.fillBtn, { backgroundColor: '#10B981', marginTop: 10 }]} 
+                          onPress={() => {
+                            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+                            const baseUrl = API_URL.replace('/api', '');
+                            const url = `${baseUrl}/uploads/${doc.filePath}`;
+                            Linking.openURL(url).catch(() => {
+                              Alert.alert('Error', 'No se pudo abrir el PDF');
+                            });
+                          }}
+                        >
+                          <Text style={styles.fillBtnText}>Descargar PDF</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))}
                   

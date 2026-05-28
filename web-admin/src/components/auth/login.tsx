@@ -293,7 +293,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
             <span>Latencia DB: 8ms</span>
           </div>
           <div className="mt-1 font-medium text-[10px] text-muted-foreground/80">
-            © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo
+            © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo <br className="sm:hidden" /><br/>juanstiven.developer@gmail.com
           </div>
         </div>
 

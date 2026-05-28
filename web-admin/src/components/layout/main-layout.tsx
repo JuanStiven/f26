@@ -10,9 +10,13 @@ interface MainLayoutProps {
   toggleTheme: () => void;
   onLogout?: () => void;
   companySettings?: { name: string; logoUrl: string | null };
+  currentUser?: any;
+  onProfileClick?: () => void;
+  onSecurityClick?: () => void;
+  notificationsData?: any[];
 }
 
-export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleTheme, onLogout, companySettings }: MainLayoutProps) {
+export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleTheme, onLogout, companySettings, currentUser, onProfileClick, onSecurityClick, notificationsData }: MainLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -58,6 +62,10 @@ export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleT
           theme={theme}
           toggleTheme={toggleTheme}
           onLogout={onLogout}
+          currentUser={currentUser}
+          onProfileClick={onProfileClick}
+          onSecurityClick={onSecurityClick}
+          notificationsData={notificationsData}
         />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 bg-background/50">
           <div className="max-w-7xl mx-auto space-y-6">

@@ -119,7 +119,7 @@ export async function createDocument(data: {
     try {
       const base64Data = companySettings.logoUrl.replace(/^data:image\/\w+;base64,/, "");
       const logoBuffer = Buffer.from(base64Data, 'base64');
-      doc.image(logoBuffer, 50, headerTop, { width: 70, height: 70, fit: [70, 70] });
+      doc.image(logoBuffer, 50, headerTop, { width: 100, height: 100, fit: [100, 100] });
     } catch(e) {
       console.error('Error adding logo to PDF:', e);
     }
@@ -127,14 +127,14 @@ export async function createDocument(data: {
 
   const alignSettings = { align: 'center' as const, width: doc.page.width - 100 };
   doc.fillColor('#000000');
-  doc.fontSize(12).font('Helvetica-Bold');
+  doc.fontSize(10).font('Helvetica-Bold');
   
   if (companySettings) {
     doc.text(companySettings.country?.toUpperCase() || 'COLOMBIA', 50, headerTop + 5, alignSettings);
     doc.text(companySettings.department?.toUpperCase() || 'ANTIOQUIA', alignSettings);
     doc.text(companySettings.name.toUpperCase(), alignSettings);
     doc.font('Helvetica').text(`NIT: ${companySettings.nit}`, alignSettings);
-    doc.text(`Sede: ${companySettings.branch || 'Sede Principal'}`, alignSettings);
+    doc.text(`${companySettings.branch || 'Sede Principal'}`, alignSettings);
   }
 
   // Restore Y position below the logo/header (whichever is taller)
@@ -143,6 +143,12 @@ export async function createDocument(data: {
   // Separator Line
   doc.moveTo(50, afterHeaderY + 10).lineTo(doc.page.width - 50, afterHeaderY + 10).lineWidth(1).strokeColor('#cccccc').stroke();
   doc.y = afterHeaderY + 30;
+
+  const checkPageBreak = (requiredHeight: number) => {
+    if (doc.y + requiredHeight > doc.page.height - 80) {
+      doc.addPage();
+    }
+  };
 
   // ─── TÍTULO Y DESCRIPCIÓN DE PLANTILLA ───
   doc.fillColor('#004F9F'); // Azul Institucional
@@ -153,16 +159,121 @@ export async function createDocument(data: {
     let formattedDescription = template.description;
     const fields = template.fields as any[];
     
-    // Reemplazar variables dinámicas en la descripción (ej: {{Nombre}})
+    // 1. Resolver los labels de los campos 'select' en lugar de mostrar los IDs
     Object.entries(data.formData).forEach(([key, value]) => {
       const fieldDef = fields?.find(f => f.id === key);
-      if (fieldDef && fieldDef.label) {
-        const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
-        formattedDescription = formattedDescription.replace(regex, String(value));
+      if (fieldDef && fieldDef.type === 'select') {
+        const option = fieldDef.options?.find((o:any) => String(o.id) === String(value) || String(o.value) === String(value));
+        if (option) {
+          data.formData[key] = option.label || option.value;
+        }
       }
     });
 
-    doc.fillColor('#4B5563').fontSize(11).font('Helvetica').text(formattedDescription, { align: 'justify' });
+    const blockTokens: any[] = [];
+
+    // 2. Reemplazar variables dinámicas y extraer tablas/imágenes como bloques
+    Object.entries(data.formData).forEach(([key, value]) => {
+      const fieldDef = fields?.find(f => f.id === key);
+      if (fieldDef && fieldDef.label) {
+        // Encontrar todas las ocurrencias sin case-sensitivity
+        const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
+        
+        if (typeof value === 'string' && value.startsWith('data:image/')) {
+          const placeholder = `__IMAGE_BLOCK_${key}__`;
+          if (regex.test(formattedDescription)) {
+             formattedDescription = formattedDescription.replace(regex, placeholder);
+             blockTokens.push({ placeholder, type: 'image', value });
+          }
+        } else if (Array.isArray(value)) {
+          const placeholder = `__TABLE_BLOCK_${key}__`;
+          if (regex.test(formattedDescription)) {
+             formattedDescription = formattedDescription.replace(regex, placeholder);
+             blockTokens.push({ placeholder, type: 'table', value });
+          }
+        } else {
+          // Es un texto o número normal, se reemplaza inline
+          formattedDescription = formattedDescription.replace(regex, String(value));
+        }
+      }
+    });
+
+    // 3. Partir la descripción en texto plano y bloques visuales
+    let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
+
+    blockTokens.forEach(block => {
+      let newFinalBlocks: any[] = [];
+      finalBlocks.forEach(fb => {
+        if (fb.type === 'text') {
+           const parts = fb.content.split(block.placeholder);
+           parts.forEach((part: string, idx: number) => {
+             if (part) newFinalBlocks.push({ type: 'text', content: part });
+             if (idx < parts.length - 1) newFinalBlocks.push(block);
+           });
+        } else {
+           newFinalBlocks.push(fb);
+        }
+      });
+      finalBlocks = newFinalBlocks;
+    });
+
+    // 4. Renderizar cada bloque en el PDF secuencialmente
+    finalBlocks.forEach(block => {
+      if (block.type === 'text') {
+        doc.fillColor('#4B5563').fontSize(11).font('Helvetica').text(block.content, { align: 'justify' });
+      } else if (block.type === 'image') {
+        try {
+          const base64Data = block.value.replace(/^data:image\/\w+;base64,/, "");
+          const imgBuffer = Buffer.from(base64Data, 'base64');
+          checkPageBreak(160);
+          doc.moveDown(0.5);
+          doc.image(imgBuffer, { width: 150 }); 
+          doc.moveDown(0.5);
+        } catch(e) {
+          doc.fillColor('#4B5563').fontSize(11).font('Helvetica').text(`[Error cargando imagen]`);
+        }
+      } else if (block.type === 'table') {
+        const value = block.value;
+        if (value.length > 0) {
+          const cols = Object.keys(value[0]);
+          const startX = 50;
+          const tableWidth = 500;
+          const colWidth = tableWidth / cols.length;
+
+          doc.moveDown(0.5);
+          const headerY = doc.y;
+          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000');
+          cols.forEach((col: string, idx: number) => {
+            doc.text(col, startX + (idx * colWidth), headerY, { width: colWidth - 5, align: 'left' });
+          });
+          doc.y = headerY + 12;
+          doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(1).strokeColor('#004F9F').stroke();
+          doc.y += 5;
+
+          doc.font('Helvetica').fontSize(9);
+          doc.fillColor('#4B5563');
+          value.forEach((row: any) => {
+            checkPageBreak(25);
+            const rowY = doc.y;
+            let maxRowHeight = 12;
+            cols.forEach((col: string, idx: number) => {
+              const valStr = String(row[col] || '');
+              doc.text(valStr, startX + (idx * colWidth), rowY, { width: colWidth - 5, align: 'left' });
+              const currentHeight = doc.y - rowY;
+              if (currentHeight > maxRowHeight) maxRowHeight = currentHeight;
+            });
+            doc.y = rowY + maxRowHeight;
+            doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+            doc.y += 5;
+          });
+          doc.x = 50; // Reset X
+          doc.moveDown(0.5);
+        } else {
+          doc.fillColor('#4B5563').fontSize(11).font('Helvetica').text('Tabla sin datos');
+        }
+      }
+    });
+
     doc.moveDown(1.5);
   }
 
@@ -198,6 +309,7 @@ export async function createDocument(data: {
           try {
             const base64Data = field.value.replace(/^data:image\/\w+;base64,/, "");
             const imgBuffer = Buffer.from(base64Data, 'base64');
+            checkPageBreak(160);
             doc.moveDown(0.5);
             // Mostrar fotos pequeñas y firmas legibles
             doc.image(imgBuffer, { width: 150 }); 
@@ -222,6 +334,7 @@ export async function createDocument(data: {
 
           doc.font('Helvetica').fontSize(9);
           field.value.forEach((row: any) => {
+            checkPageBreak(25);
             const rowY = doc.y;
             let maxRowHeight = 12;
             cols.forEach((col, idx) => {
