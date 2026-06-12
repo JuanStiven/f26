@@ -1,7 +1,8 @@
-export declare function getAllEmployees(): Promise<{
+export declare function getAllEmployees(role?: string): Promise<{
     name: string;
     id: string;
     document: string;
+    role: import(".prisma/client").$Enums.Role;
     status: string;
     position: string | null;
     createdAt: Date;
@@ -29,6 +30,7 @@ export declare function getEmployeeById(id: string): Promise<{
         signatureUrl: string | null;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         filePath: string | null;
+        templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
         templateId: string;
         filledById: string;
     })[];
@@ -38,10 +40,12 @@ export declare function createEmployee(data: {
     document: string;
     pin: string;
     position?: string;
+    role?: string;
 }): Promise<{
     name: string;
     id: string;
     document: string;
+    role: import(".prisma/client").$Enums.Role;
     status: string;
     position: string | null;
     createdAt: Date;
@@ -55,6 +59,7 @@ export declare function updateEmployee(id: string, data: {
     name: string;
     id: string;
     document: string;
+    role: import(".prisma/client").$Enums.Role;
     status: string;
     position: string | null;
 }>;

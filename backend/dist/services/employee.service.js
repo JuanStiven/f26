@@ -10,15 +10,16 @@ exports.updateEmployee = updateEmployee;
 exports.deleteEmployee = deleteEmployee;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../models/prisma"));
-async function getAllEmployees() {
+async function getAllEmployees(role) {
     return prisma_1.default.user.findMany({
-        where: { role: 'EMPLOYEE' },
+        where: role ? { role: role } : undefined,
         select: {
             id: true,
             name: true,
             document: true,
             position: true,
             status: true,
+            role: true,
             createdAt: true,
             _count: { select: { signedDocuments: true } },
         },
@@ -59,8 +60,8 @@ async function createEmployee(data) {
             name: data.name,
             document: data.document,
             password: hashedPin,
-            role: 'EMPLOYEE',
-            position: data.position || 'Operario de Campo',
+            role: data.role || 'EMPLOYEE',
+            position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
             status: 'Activo',
         },
         select: {
@@ -68,6 +69,7 @@ async function createEmployee(data) {
             name: true,
             document: true,
             position: true,
+            role: true,
             status: true,
             createdAt: true,
         },
@@ -95,6 +97,7 @@ async function updateEmployee(id, data) {
             name: true,
             document: true,
             position: true,
+            role: true,
             status: true,
         },
     });

@@ -332,24 +332,167 @@ export default function App() {
 
   const renderRichDescription = (description: string, data: any, fields: any[] = []) => {
     if (!description) return <Text style={{ fontSize: 14, color: '#4B5563', marginBottom: 16 }}>Sin descripción</Text>;
-    
-    const replaced = description.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-      const cleanKey = key.trim();
-      let val = data[cleanKey];
-      if (!val) {
-        const field = fields.find(f => f.label === cleanKey);
-        if (field) {
-          val = data[field.id];
+
+    const mappedData: Record<string, any> = {};
+    Object.keys(data || {}).forEach(key => {
+      const fieldDef = fields.find((f: any) => f.id === key);
+      if (fieldDef && fieldDef.label) {
+        let val = data[key];
+        if (fieldDef.type === 'select') {
+          const option = fieldDef.options?.find((o: any) => String(o.id) === String(val) || String(o.value) === String(val));
+          if (option) val = option.label || option.value;
         }
+        mappedData[fieldDef.label] = val;
       }
-      return val ? val.toString() : match;
     });
 
-    return (
-      <Text style={{ fontSize: 14, color: '#4B5563', lineHeight: 22, marginBottom: 16 }}>
-        {replaced}
-      </Text>
-    );
+    const lines = description.split('\n');
+    const blocks: React.ReactNode[] = [];
+    let currentBoxContent: React.ReactNode[] = [];
+    let inBox = false;
+
+    const renderTextContent = (textContent: string, lineIndex: number) => {
+      const regex = /({{\s*[^}]+\s*}})/g;
+      const parts = textContent.split(regex);
+      
+      return parts.map((part, i) => {
+        if (part.startsWith('{{') && part.endsWith('}}')) {
+          const label = part.replace(/^{{\s*/, '').replace(/\s*}}$/, '');
+          const value = mappedData[label];
+          if (value !== undefined) {
+            if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+              return <Image key={`img-${i}`} source={{ uri: value }} style={{ width: '100%', height: 150, resizeMode: 'contain', marginVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }} />;
+            } else if (Array.isArray(value)) {
+              if (value.length === 0) return <Text key={`tbl-${i}`} style={{ fontStyle: 'italic', color: '#9CA3AF', marginVertical: 8 }}>Tabla sin datos</Text>;
+              const cols = Object.keys(value[0]);
+              return (
+                <View key={`tbl-${i}`} style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, marginVertical: 8, overflow: 'hidden' }}>
+                  <ScrollView horizontal>
+                    <View>
+                      <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', padding: 8, borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
+                        {cols.map(c => <Text key={`th-${c}`} style={{ width: 100, fontWeight: 'bold', fontSize: 12, color: '#4B5563', marginRight: 8 }} numberOfLines={1}>{c}</Text>)}
+                      </View>
+                      {value.map((r: any, rIdx: number) => (
+                        <View key={`tr-${rIdx}`} style={{ flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderColor: '#F3F4F6' }}>
+                          {cols.map(c => <Text key={`td-${c}`} style={{ width: 100, fontSize: 12, color: '#374151', marginRight: 8 }} numberOfLines={2}>{String(r[c] || '')}</Text>)}
+                        </View>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              );
+            }
+            return <Text key={`val-${i}`} style={{ fontWeight: 'bold', color: '#004F9F' }}>{String(value)}</Text>;
+          }
+          return <Text key={`txt-${i}`} style={{ color: '#9CA3AF' }}>{part}</Text>;
+        }
+
+        const parseInline = (text: string) => {
+          const tokens = [];
+          let currentText = '';
+          let b = false, it = false, s = false;
+          for (let idx = 0; idx < text.length; idx++) {
+            if (text.startsWith('**', idx)) {
+              if (currentText) tokens.push({ text: currentText, b, it, s });
+              currentText = '';
+              b = !b;
+              idx += 1;
+            } else if (text.startsWith('_', idx)) {
+              if (currentText) tokens.push({ text: currentText, b, it, s });
+              currentText = '';
+              it = !it;
+            } else if (text.startsWith('~', idx)) {
+              if (currentText) tokens.push({ text: currentText, b, it, s });
+              currentText = '';
+              s = !s;
+            } else {
+              currentText += text[idx];
+            }
+          }
+          if (currentText) tokens.push({ text: currentText, b, it, s });
+          return tokens.map((t, idx) => {
+            const st: any = {};
+            if (t.b) st.fontWeight = 'bold';
+            if (t.it) st.fontStyle = 'italic';
+            if (t.s) st.textDecorationLine = 'line-through';
+            return <Text key={`t-${i}-${idx}`} style={st}>{t.text}</Text>;
+          });
+        };
+
+        return <Text key={`chunk-${i}`}>{parseInline(part)}</Text>;
+      });
+    };
+
+    lines.forEach((line, index) => {
+      if (line.trim() === '/==') {
+        inBox = true;
+        return;
+      }
+      if (line.trim() === '==/') {
+        inBox = false;
+        blocks.push(
+          <View key={`box-${index}`} style={{ borderWidth: 2, borderColor: '#374151', padding: 12, borderRadius: 8, marginVertical: 12 }}>
+            {currentBoxContent}
+          </View>
+        );
+        currentBoxContent = [];
+        return;
+      }
+
+      let isH1 = false, isH2 = false, isH3 = false, isH4 = false;
+      let align: 'left' | 'right' | 'center' | 'justify' = 'justify';
+      let textToRender = line.trim();
+
+      const h1Match = textToRender.match(/\(\s*h1\s*\)(.*?)\(\s*\/h1\s*\)/i);
+      if (h1Match) { isH1 = true; textToRender = textToRender.replace(h1Match[0], h1Match[1]).trim(); }
+      const h2Match = textToRender.match(/\(\s*h2\s*\)(.*?)\(\s*\/h2\s*\)/i);
+      if (h2Match) { isH2 = true; textToRender = textToRender.replace(h2Match[0], h2Match[1]).trim(); }
+      const h3Match = textToRender.match(/\(\s*h3\s*\)(.*?)\(\s*\/h3\s*\)/i);
+      if (h3Match) { isH3 = true; textToRender = textToRender.replace(h3Match[0], h3Match[1]).trim(); }
+      const h4Match = textToRender.match(/\(\s*h4\s*\)(.*?)\(\s*\/h4\s*\)/i);
+      if (h4Match) { isH4 = true; textToRender = textToRender.replace(h4Match[0], h4Match[1]).trim(); }
+
+      const jMatch = textToRender.match(/\(\s*j\s*\)(.*?)\(\s*\/j\s*\)/i);
+      if (jMatch) { align = 'justify'; textToRender = textToRender.replace(jMatch[0], jMatch[1]).trim(); }
+      const rMatch = textToRender.match(/\(\s*r\s*\)(.*?)\(\s*\/r\s*\)/i);
+      if (rMatch) { align = 'right'; textToRender = textToRender.replace(rMatch[0], rMatch[1]).trim(); }
+      const lMatch = textToRender.match(/\(\s*l\s*\)(.*?)\(\s*\/l\s*\)/i);
+      if (lMatch) { align = 'left'; textToRender = textToRender.replace(lMatch[0], lMatch[1]).trim(); }
+
+      const contentElements = renderTextContent(textToRender, index);
+
+      let element;
+      if (isH1) element = <Text key={`line-${index}`} style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', marginTop: 14, marginBottom: 6, textAlign: align }}>{contentElements}</Text>;
+      else if (isH2) element = <Text key={`line-${index}`} style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', marginTop: 12, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
+      else if (isH3) element = <Text key={`line-${index}`} style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 10, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
+      else if (isH4) element = <Text key={`line-${index}`} style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', marginTop: 8, marginBottom: 2, textAlign: align }}>{contentElements}</Text>;
+      else if (line.trim() === '') {
+        element = <View key={`line-${index}`} style={{ height: 16 }} />;
+      } else {
+        const containsBlocks = contentElements.some((el: any) => el?.type === View || el?.type === Image || (el?.type === Text && el?.props?.style?.marginVertical));
+        if (containsBlocks) {
+          element = <View key={`line-${index}`} style={{ marginBottom: 4 }}>{contentElements}</View>;
+        } else {
+          element = <Text key={`line-${index}`} style={{ fontSize: 14, color: '#4B5563', lineHeight: 22, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
+        }
+      }
+
+      if (inBox) {
+        currentBoxContent.push(element);
+      } else {
+        blocks.push(element);
+      }
+    });
+
+    if (currentBoxContent.length > 0) {
+      blocks.push(
+        <View key={`box-end`} style={{ borderWidth: 2, borderColor: '#374151', padding: 12, borderRadius: 8, marginVertical: 12 }}>
+          {currentBoxContent}
+        </View>
+      );
+    }
+
+    return <View>{blocks}</View>;
   };
 
   const handleSaveDocument = async () => {
@@ -780,11 +923,21 @@ export default function App() {
 
               <View style={styles.formContainer}>
                     {selectedTemplate.description ? (
-                      <Text style={styles.formDescription}>{selectedTemplate.description}</Text>
+                      <View style={{ marginBottom: 16 }}>
+                        {renderRichDescription(selectedTemplate.description, formData || {}, selectedTemplate.fields || [])}
+                      </View>
                     ) : null}
                     
-                    {selectedTemplate.fields?.map((field: any) => (
-                      <View key={field.id} style={styles.fieldGroup}>
+                    {selectedTemplate.fields?.map((field: any, index: number) => {
+                      const showCategory = index === 0 || field.category !== selectedTemplate.fields[index - 1].category;
+                      return (
+                        <View key={field.id}>
+                          {showCategory && field.category && (
+                            <View style={styles.categoryHeader}>
+                              <Text style={styles.categoryHeaderText}>{field.category}</Text>
+                            </View>
+                          )}
+                          <View style={styles.fieldGroup}>
                         <Text style={styles.fieldLabel}>{field.label} {field.required ? '*' : ''}</Text>
                         
                         {field.type === 'text' && (
@@ -942,8 +1095,10 @@ export default function App() {
                             </TouchableOpacity>
                           </View>
                         )}
-                      </View>
-                    ))}
+                          </View>
+                        </View>
+                      );
+                    })}
 
                     <TouchableOpacity 
                       style={[styles.button, styles.buttonPrimary, { marginTop: 20 }]}
@@ -1667,6 +1822,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  categoryHeader: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  categoryHeaderText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#374151',
   },
   backBtn: {
     paddingVertical: 6,

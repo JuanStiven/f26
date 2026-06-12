@@ -47,6 +47,159 @@ interface Template {
   createdAt: string;
   storagePath?: string;
   assignedUsers?: any[];
+  isQualityDocument?: boolean;
+  qualityCode?: string;
+  qualityVersion?: string;
+  qualityDate?: string;
+}
+export function MarkdownRenderer({ text, data = {} }: { text: string, data?: Record<string, any> }) {
+  if (!text) return null;
+
+  const lines = text.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let currentBoxContent: React.ReactNode[] = [];
+  let inBox = false;
+
+  const renderTextContent = (textContent: string) => {
+    const regex = /({{\s*[^}]+\s*}})/g;
+    const parts = textContent.split(regex);
+    
+    return parts.map((part, i) => {
+      if (part.startsWith('{{') && part.endsWith('}}')) {
+         const label = part.replace(/^{{\s*/, '').replace(/\s*}}$/, '');
+         const value = data[label];
+         if (value !== undefined) {
+           if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+             return <img key={i} src={value} alt={label} className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
+           } else if (Array.isArray(value)) {
+             if (value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
+             const cols = Object.keys(value[0]);
+             return (
+               <div key={i} className="overflow-x-auto my-2 border border-border/40 rounded-md bg-white">
+                 <table className="w-full text-sm text-left">
+                   <thead className="bg-muted text-muted-foreground uppercase text-xs">
+                     <tr>
+                       {cols.map(c => <th key={c} className="px-4 py-2 border-b border-border/40">{c}</th>)}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {value.map((r: any, rIdx: number) => (
+                       <tr key={rIdx} className="border-b border-border/20 last:border-0 hover:bg-muted/50">
+                         {cols.map(c => <td key={c} className="px-4 py-2">{String(r[c] || '')}</td>)}
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </div>
+             );
+           }
+           return <span key={i} className="font-semibold text-primary">{String(value)}</span>;
+         }
+         return <span key={i} className="text-muted-foreground">{part}</span>;
+      }
+
+      const parseInline = (text: string) => {
+        const tokens = [];
+        let currentText = '';
+        let b = false, it = false, s = false;
+        for (let idx = 0; idx < text.length; idx++) {
+          if (text.startsWith('**', idx)) {
+            if (currentText) tokens.push({ text: currentText, b, it, s });
+            currentText = '';
+            b = !b;
+            idx += 1;
+          } else if (text.startsWith('_', idx)) {
+            if (currentText) tokens.push({ text: currentText, b, it, s });
+            currentText = '';
+            it = !it;
+          } else if (text.startsWith('~', idx)) {
+            if (currentText) tokens.push({ text: currentText, b, it, s });
+            currentText = '';
+            s = !s;
+          } else {
+            currentText += text[idx];
+          }
+        }
+        if (currentText) tokens.push({ text: currentText, b, it, s });
+        return tokens.map((t, idx) => {
+          let className = '';
+          if (t.b) className += 'font-bold ';
+          if (t.it) className += 'italic ';
+          if (t.s) className += 'line-through ';
+          if (!className) return <span key={idx}>{t.text}</span>;
+          return <span key={idx} className={className}>{t.text}</span>;
+        });
+      };
+
+      return <span key={`chunk-${i}`}>{parseInline(part)}</span>;
+    });
+  };
+
+  lines.forEach((line, index) => {
+    if (line.trim() === '/==') {
+      inBox = true;
+      return;
+    }
+    if (line.trim() === '==/') {
+      inBox = false;
+      blocks.push(
+        <div key={`box-${index}`} className="border-2 border-foreground p-4 rounded-md my-4">
+          {currentBoxContent}
+        </div>
+      );
+      currentBoxContent = [];
+      return;
+    }
+
+    let isH1 = false, isH2 = false, isH3 = false, isH4 = false;
+    let align = 'text-justify';
+    let textToRender = line.trim();
+
+    const h1Match = textToRender.match(/\(\s*h1\s*\)(.*?)\(\s*\/h1\s*\)/i);
+    if (h1Match) { isH1 = true; textToRender = textToRender.replace(h1Match[0], h1Match[1]).trim(); }
+    const h2Match = textToRender.match(/\(\s*h2\s*\)(.*?)\(\s*\/h2\s*\)/i);
+    if (h2Match) { isH2 = true; textToRender = textToRender.replace(h2Match[0], h2Match[1]).trim(); }
+    const h3Match = textToRender.match(/\(\s*h3\s*\)(.*?)\(\s*\/h3\s*\)/i);
+    if (h3Match) { isH3 = true; textToRender = textToRender.replace(h3Match[0], h3Match[1]).trim(); }
+    const h4Match = textToRender.match(/\(\s*h4\s*\)(.*?)\(\s*\/h4\s*\)/i);
+    if (h4Match) { isH4 = true; textToRender = textToRender.replace(h4Match[0], h4Match[1]).trim(); }
+
+    const jMatch = textToRender.match(/\(\s*j\s*\)(.*?)\(\s*\/j\s*\)/i);
+    if (jMatch) { align = 'text-justify'; textToRender = textToRender.replace(jMatch[0], jMatch[1]).trim(); }
+    const rMatch = textToRender.match(/\(\s*r\s*\)(.*?)\(\s*\/r\s*\)/i);
+    if (rMatch) { align = 'text-right'; textToRender = textToRender.replace(rMatch[0], rMatch[1]).trim(); }
+    const lMatch = textToRender.match(/\(\s*l\s*\)(.*?)\(\s*\/l\s*\)/i);
+    if (lMatch) { align = 'text-left'; textToRender = textToRender.replace(lMatch[0], lMatch[1]).trim(); }
+
+    const content = renderTextContent(textToRender);
+
+    let element;
+    if (isH1) element = <h1 key={`line-${index}`} className={`text-2xl font-bold mt-3 mb-2 ${align}`}>{content}</h1>;
+    else if (isH2) element = <h2 key={`line-${index}`} className={`text-xl font-bold mt-2 mb-1 ${align}`}>{content}</h2>;
+    else if (isH3) element = <h3 key={`line-${index}`} className={`text-lg font-bold mt-2 mb-1 ${align}`}>{content}</h3>;
+    else if (isH4) element = <h4 key={`line-${index}`} className={`text-base font-bold mt-1 mb-1 ${align}`}>{content}</h4>;
+    else if (line.trim() === '') {
+      element = <div key={`line-${index}`} className="h-4" />;
+    } else {
+      element = <div key={`line-${index}`} className={`mb-1 ${align}`}>{content}</div>;
+    }
+
+    if (inBox) {
+      currentBoxContent.push(element);
+    } else {
+      blocks.push(element);
+    }
+  });
+
+  if (currentBoxContent.length > 0) {
+    blocks.push(
+      <div key={`box-end`} className="border-2 border-foreground p-4 rounded-md my-4">
+        {currentBoxContent}
+      </div>
+    );
+  }
+
+  return <div className="text-sm">{blocks}</div>;
 }
 
 export default function App() {
@@ -98,7 +251,14 @@ export default function App() {
     country: 'Colombia',
     department: 'Antioquia',
     branch: 'Sede Principal',
-    logoUrl: null as string | null
+    logoUrl: null as string | null,
+    pdfTitleColor: '#004F9F',
+    pdfSubtitleColor: '#004F9F',
+    pdfTitleFontSize: 16,
+    pdfSubtitleFontSize: 12,
+    pdfParagraphFontSize: 11,
+    pdfLogoWidth: 100,
+    pdfLogoHeight: 100
   });
 
   const [employees, setEmployees] = useState<any[]>([]);
@@ -161,7 +321,11 @@ export default function App() {
     description: '',
     storagePath: '',
     fields: [],
-    assignedUsers: []
+    assignedUsers: [],
+    isQualityDocument: false,
+    qualityCode: '',
+    qualityVersion: '',
+    qualityDate: ''
   });
 
   const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown'>('text');
@@ -411,21 +575,25 @@ export default function App() {
         description: newTemplate.description || '',
         storagePath: newTemplate.storagePath || 'Raíz',
         fields: newTemplate.fields || [],
-        assignedUsers: newTemplate.assignedUsers?.map((u: any) => u.id) || []
+        assignedUsers: newTemplate.assignedUsers?.map((u: any) => u.id) || [],
+        isQualityDocument: newTemplate.isQualityDocument || false,
+        qualityCode: newTemplate.qualityCode || '',
+        qualityVersion: newTemplate.qualityVersion || '',
+        qualityDate: newTemplate.qualityDate || ''
       };
 
       if (newTemplate.id) {
         const response = await api.put(`/templates/${newTemplate.id}`, payload);
         if (response.data.success) {
           setTemplates(prev => prev.map(t => t.id === newTemplate.id ? response.data.data : t));
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [] });
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
           alert('Plantilla actualizada con éxito.');
         }
       } else {
         const response = await api.post('/templates', payload);
         if (response.data.success) {
           setTemplates(prev => [...prev, response.data.data]);
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [] });
+          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
           alert('Plantilla guardada con éxito.');
         }
       }
@@ -786,17 +954,74 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between items-end">
-                  <label className="text-xs font-medium text-muted-foreground">Cuerpo del Documento (Descripción)</label>
-                  <span className="text-[10px] text-muted-foreground italic">Usa el botón "Insertar" en tus campos para agregarlos aquí</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Tipo de Documento</label>
+                  <select 
+                    value={newTemplate.isQualityDocument ? 'calidad' : 'libre'}
+                    onChange={(e) => setNewTemplate(prev => ({ ...prev, isQualityDocument: e.target.value === 'calidad' }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                  >
+                    <option value="libre">Libre</option>
+                    <option value="calidad">Aprobado por Calidad</option>
+                  </select>
+                </div>
+              </div>
+
+              {newTemplate.isQualityDocument && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-muted/20 p-4 rounded-lg border border-border">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Código</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. REG-01"
+                      value={newTemplate.qualityCode || ''}
+                      onChange={(e) => setNewTemplate(prev => ({ ...prev, qualityCode: e.target.value }))}
+                      className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Versión</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. 01"
+                      value={newTemplate.qualityVersion || ''}
+                      onChange={(e) => setNewTemplate(prev => ({ ...prev, qualityVersion: e.target.value }))}
+                      className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Fecha</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ej. 01/01/2022"
+                      value={newTemplate.qualityDate || ''}
+                      onChange={(e) => setNewTemplate(prev => ({ ...prev, qualityDate: e.target.value }))}
+                      className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Cuerpo del Documento</label>
+                <div className="flex flex-col text-[10px] text-muted-foreground italic mt-1">
+                  <span className="text-primary font-medium">Instrucciones de formato:</span>
+                  <ul className="list-disc list-inside space-y-1 mb-2 mt-1">
+                    <li>Envuelve el texto en <code className="bg-muted px-1 rounded">/==</code> y <code className="bg-muted px-1 rounded">==/</code> para dibujar un recuadro (bordes) alrededor.</li>
+                    <li>Usa <code className="bg-muted px-1 rounded">(h1)</code> a <code className="bg-muted px-1 rounded">(h4)</code> con su cierre, ej: <code className="bg-muted px-1 rounded">(h2) Título (/h2)</code>.</li>
+                    <li>Alineación (al inicio de línea): <code className="bg-muted px-1 rounded">(j)</code> justificado, <code className="bg-muted px-1 rounded">(r)</code> derecha, <code className="bg-muted px-1 rounded">(l)</code> izquierda. Cierre: <code className="bg-muted px-1 rounded">(/j)</code>.</li>
+                    <li>Estilos de texto: <code className="bg-muted px-1 rounded">**negrita**</code>, <code className="bg-muted px-1 rounded">_cursiva_</code>, y <code className="bg-muted px-1 rounded">~tachado~</code>.</li>
+                    <li>Los saltos de línea se respetarán en el PDF final.</li>
+                  </ul>
+                  <span className="self-end">Usa el botón "Insertar" en tus campos para agregar variables aquí</span>
                 </div>
                 <textarea 
                   ref={descriptionRef}
-                  placeholder="Ej. Yo {{Nombre Empleado}} identificado con número de documento {{Cédula}} certifico que..."
+                  placeholder="Ej. /==\n(h2)DATOS PERSONALES\nYo **{{Nombre Empleado}}** identificado con número de documento **{{Cédula}}** certifico que...\n==/"
                   value={newTemplate.description || ''}
                   onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full text-xs p-3 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none min-h-[120px] resize-y"
+                  className="w-full text-xs p-3 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none min-h-[200px] resize-y font-mono"
                 />
               </div>
 
@@ -1063,7 +1288,7 @@ export default function App() {
 
                 <div className="space-y-2">
                   <h4 className="text-sm font-bold text-primary">{newTemplate.name || 'Sin Título de Plantilla'}</h4>
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{newTemplate.description || 'Sin descripción'}</p>
+                  <MarkdownRenderer text={newTemplate.description || 'Sin descripción'} />
                 </div>
 
                 <div className="h-px bg-border/80 my-4" />
@@ -1185,7 +1410,11 @@ export default function App() {
                           description: t.description,
                           storagePath: t.storagePath,
                           fields: t.fields || [],
-                          assignedUsers: t.assignedUsers || []
+                          assignedUsers: t.assignedUsers || [],
+                          isQualityDocument: t.isQualityDocument || false,
+                          qualityCode: t.qualityCode || '',
+                          qualityVersion: t.qualityVersion || '',
+                          qualityDate: t.qualityDate || ''
                         });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
@@ -2000,6 +2229,95 @@ export default function App() {
 
             </div>
 
+            <h3 className="font-semibold text-foreground border-b border-border pb-3 mt-8">Formato de PDF</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Color de Títulos (Hexadecimal)</label>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-10 h-10 rounded-lg border border-border shrink-0" 
+                      style={{ backgroundColor: companySettings.pdfTitleColor || '#004F9F' }}
+                    />
+                    <input 
+                      type="text" 
+                      value={companySettings.pdfTitleColor || '#004F9F'}
+                      onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfTitleColor: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background"
+                      placeholder="#004F9F"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Color de Subtítulos (Hexadecimal)</label>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-10 h-10 rounded-lg border border-border shrink-0" 
+                      style={{ backgroundColor: companySettings.pdfSubtitleColor || '#004F9F' }}
+                    />
+                    <input 
+                      type="text" 
+                      value={companySettings.pdfSubtitleColor || '#004F9F'}
+                      onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfSubtitleColor: e.target.value }))}
+                      className="w-full h-10 px-3 rounded-lg border border-border bg-background"
+                      placeholder="#004F9F"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Ancho del Logo en PDF (px)</label>
+                  <input 
+                    type="number" 
+                    value={companySettings.pdfLogoWidth || ''}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfLogoWidth: parseInt(e.target.value) || 100 }))}
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background"
+                    placeholder="Ej. 100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Alto del Logo en PDF (px)</label>
+                  <input 
+                    type="number" 
+                    value={companySettings.pdfLogoHeight || ''}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfLogoHeight: parseInt(e.target.value) || 100 }))}
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background"
+                    placeholder="Ej. 100"
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Tamaño de Fuente (Títulos)</label>
+                  <input 
+                    type="number" 
+                    value={companySettings.pdfTitleFontSize || 16}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfTitleFontSize: parseInt(e.target.value) || 16 }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Tamaño de Fuente (Subtítulos)</label>
+                  <input 
+                    type="number" 
+                    value={companySettings.pdfSubtitleFontSize || 12}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfSubtitleFontSize: parseInt(e.target.value) || 12 }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Tamaño de Fuente (Párrafos)</label>
+                  <input 
+                    type="number" 
+                    value={companySettings.pdfParagraphFontSize || 11}
+                    onChange={(e) => setCompanySettings(prev => ({ ...prev, pdfParagraphFontSize: parseInt(e.target.value) || 11 }))}
+                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="border-t border-border pt-4 flex justify-end">
               <button 
                 onClick={async () => {
@@ -2085,7 +2403,9 @@ export default function App() {
 
               <div className="space-y-2">
                 <h4 className="text-sm font-bold text-primary">{previewTemplate.name || 'Sin Título de Plantilla'}</h4>
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{previewTemplate.description || 'Sin descripción'}</p>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <MarkdownRenderer text={previewTemplate.description || 'Sin descripción'} />
+                </div>
               </div>
 
               <div className="h-px bg-border/80 my-4" />
@@ -2312,96 +2632,25 @@ export default function App() {
               {(() => {
                 const description = documentModal.template?.description;
                 if (!description) return null;
-                const data = { ...documentModal.data };
+
+                const mappedData: Record<string, any> = {};
                 const fields = documentModal.template?.fields || [];
                 
-                // 1. Resolve select labels
-                Object.keys(data).forEach(key => {
-                  const fieldDef = fields.find((f: any) => f.id === key);
-                  if (fieldDef && fieldDef.type === 'select') {
-                    const option = fieldDef.options?.find((o: any) => String(o.id) === String(data[key]) || String(o.value) === String(data[key]));
-                    if (option) {
-                      data[key] = option.label || option.value;
-                    }
-                  }
-                });
-
-                // 2. Build blocks
-                let formattedDescription = description;
-                const blockTokens: any[] = [];
-                Object.keys(data).forEach(key => {
+                Object.keys(documentModal.data || {}).forEach(key => {
                   const fieldDef = fields.find((f: any) => f.id === key);
                   if (fieldDef && fieldDef.label) {
-                    const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
-                    const value = data[key];
-                    if (typeof value === 'string' && value.startsWith('data:image/')) {
-                       const placeholder = `__IMAGE_BLOCK_${key}__`;
-                       if (regex.test(formattedDescription)) {
-                         formattedDescription = formattedDescription.replace(regex, placeholder);
-                         blockTokens.push({ placeholder, type: 'image', value });
-                       }
-                    } else if (Array.isArray(value)) {
-                       const placeholder = `__TABLE_BLOCK_${key}__`;
-                       if (regex.test(formattedDescription)) {
-                         formattedDescription = formattedDescription.replace(regex, placeholder);
-                         blockTokens.push({ placeholder, type: 'table', value });
-                       }
-                    } else {
-                       formattedDescription = formattedDescription.replace(regex, String(value));
+                    let val = documentModal.data[key];
+                    if (fieldDef.type === 'select') {
+                      const option = fieldDef.options?.find((o: any) => String(o.id) === String(val) || String(o.value) === String(val));
+                      if (option) val = option.label || option.value;
                     }
+                    mappedData[fieldDef.label] = val;
                   }
-                });
-
-                let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
-                blockTokens.forEach(block => {
-                  let newFinalBlocks: any[] = [];
-                  finalBlocks.forEach(fb => {
-                    if (fb.type === 'text') {
-                       const parts = fb.content.split(block.placeholder);
-                       parts.forEach((part: string, idx: number) => {
-                         if (part) newFinalBlocks.push({ type: 'text', content: part });
-                         if (idx < parts.length - 1) newFinalBlocks.push(block);
-                       });
-                    } else {
-                       newFinalBlocks.push(fb);
-                    }
-                  });
-                  finalBlocks = newFinalBlocks;
                 });
 
                 return (
                   <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                    <div className="text-sm text-primary/80 font-medium leading-relaxed text-justify space-y-4">
-                      {finalBlocks.map((block, i) => {
-                        if (block.type === 'text') {
-                          return <span key={i} className="whitespace-pre-wrap">{block.content}</span>;
-                        } else if (block.type === 'image') {
-                          return <img key={i} src={block.value} alt="Variable Image" className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
-                        } else if (block.type === 'table') {
-                           if (block.value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
-                           const cols = Object.keys(block.value[0]);
-                           return (
-                             <div key={i} className="overflow-x-auto my-2 border border-border/40 rounded-md bg-white">
-                               <table className="w-full text-sm text-left">
-                                 <thead className="bg-muted text-muted-foreground uppercase text-xs">
-                                   <tr>
-                                     {cols.map(c => <th key={c} className="px-4 py-2 border-b border-border/40">{c}</th>)}
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {block.value.map((r: any, rIdx: number) => (
-                                     <tr key={rIdx} className="border-b border-border/20 last:border-0 hover:bg-muted/50">
-                                       {cols.map(c => <td key={c} className="px-4 py-2">{String(r[c] || '')}</td>)}
-                                     </tr>
-                                   ))}
-                                 </tbody>
-                               </table>
-                             </div>
-                           );
-                        }
-                        return null;
-                      })}
-                    </div>
+                    <MarkdownRenderer text={description} data={mappedData} />
                   </div>
                 );
               })()}

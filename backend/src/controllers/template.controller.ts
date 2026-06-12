@@ -27,14 +27,14 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   try {
-    const { name, description, storagePath, fields } = req.body;
+    const { name, fields } = req.body;
 
     if (!name || !fields || !Array.isArray(fields)) {
       res.status(400).json({ success: false, message: 'Nombre y campos son requeridos.' });
       return;
     }
 
-    const template = await templateService.createTemplate({ name, description, storagePath, fields });
+    const template = await templateService.createTemplate(req.body);
     res.status(201).json({ success: true, data: template });
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });

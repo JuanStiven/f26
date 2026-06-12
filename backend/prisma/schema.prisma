@@ -58,6 +58,14 @@ model CompanySettings {
   branch     String  @default("Sede Principal")
   logoUrl    String?
 
+  pdfTitleColor        String  @default("#004F9F")
+  pdfSubtitleColor     String  @default("#004F9F")
+  pdfTitleFontSize     Int     @default(16)
+  pdfSubtitleFontSize  Int     @default(12)
+  pdfParagraphFontSize Int     @default(11)
+  pdfLogoWidth         Int?
+  pdfLogoHeight        Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -84,6 +92,11 @@ model Template {
   description String @default("")
   storagePath String @default("") // Ruta en el servidor: "CALIDAD/AUDITORIAS"
   fields      Json   // Array de campos JSON [{id, type, label, required, columns?}]
+
+  isQualityDocument Boolean @default(false)
+  qualityCode       String?
+  qualityVersion    String?
+  qualityDate       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

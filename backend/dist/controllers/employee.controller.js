@@ -42,7 +42,8 @@ const employeeService = __importStar(require("../services/employee.service"));
 const helpers_1 = require("../middlewares/helpers");
 async function getAll(req, res) {
     try {
-        const employees = await employeeService.getAllEmployees();
+        const role = req.query.role;
+        const employees = await employeeService.getAllEmployees(role);
         res.json({ success: true, data: employees });
     }
     catch (error) {

@@ -8,7 +8,17 @@ export declare function getSettings(): Promise<{
     address: string;
     phone: string;
     manager: string;
+    country: string;
+    department: string;
+    branch: string;
     logoUrl: string | null;
+    pdfTitleColor: string;
+    pdfSubtitleColor: string;
+    pdfTitleFontSize: number;
+    pdfSubtitleFontSize: number;
+    pdfParagraphFontSize: number;
+    pdfLogoWidth: number | null;
+    pdfLogoHeight: number | null;
 }>;
 export declare function updateSettings(data: {
     name?: string;
@@ -17,6 +27,9 @@ export declare function updateSettings(data: {
     phone?: string;
     manager?: string;
     email?: string;
+    country?: string;
+    department?: string;
+    branch?: string;
     logoUrl?: string;
 }): Promise<{
     name: string;
@@ -28,5 +41,15 @@ export declare function updateSettings(data: {
     address: string;
     phone: string;
     manager: string;
+    country: string;
+    department: string;
+    branch: string;
     logoUrl: string | null;
+    pdfTitleColor: string;
+    pdfSubtitleColor: string;
+    pdfTitleFontSize: number;
+    pdfSubtitleFontSize: number;
+    pdfParagraphFontSize: number;
+    pdfLogoWidth: number | null;
+    pdfLogoHeight: number | null;
 }>;
