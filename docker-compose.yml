@@ -4,7 +4,7 @@ services:
   db:
     image: postgres:15
     container_name: ops_db
-    restart: always
+    restart: "no"
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: adminpassword
@@ -19,7 +19,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ops_backend
-    restart: always
+    restart: "no"
     ports:
       - '3000:3000'
     environment:
