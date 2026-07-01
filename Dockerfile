@@ -33,6 +33,7 @@ COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/prisma ./prisma
 COPY --from=backend-builder /app/uploads ./uploads
+COPY --from=backend-builder /app/prisma.config.ts ./
 
 # Copy built frontend assets to nginx public folder
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
