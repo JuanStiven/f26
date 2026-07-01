@@ -87,11 +87,12 @@ model Sender {
 
 // ─── Plantillas Documentales ─────────────────────────
 model Template {
-  id          String @id @default(uuid())
-  name        String
-  description String @default("")
-  storagePath String @default("") // Ruta en el servidor: "CALIDAD/AUDITORIAS"
-  fields      Json   // Array de campos JSON [{id, type, label, required, columns?}]
+  id                String @id @default(uuid())
+  name              String
+  description       String @default("") // HTML body content (rich text)
+  descriptionStyles String @default("") // CSS styles for the HTML body
+  storagePath       String @default("") // Ruta en el servidor: "CALIDAD/AUDITORIAS"
+  fields            Json   // Array de campos JSON [{id, type, label, required, columns?}]
 
   isQualityDocument Boolean @default(false)
   qualityCode       String?

@@ -323,7 +323,6 @@ export default function App() {
     }
   };
 
-  // Autorelleno de Demo
   const quickFill = (doc: string, pin: string) => {
     setDocNumber(doc);
     setPinCode(pin);
@@ -346,150 +345,238 @@ export default function App() {
       }
     });
 
-    const lines = description.split('\n');
-    const blocks: React.ReactNode[] = [];
-    let currentBoxContent: React.ReactNode[] = [];
-    let inBox = false;
+    // Replace {{variable}} tokens with data values, handling images/tables as placeholders
+    let processed = description;
+    const blockTokens: { placeholder: string; type: 'image' | 'table'; value: any }[] = [];
 
-    const renderTextContent = (textContent: string, lineIndex: number) => {
-      const regex = /({{\s*[^}]+\s*}})/g;
-      const parts = textContent.split(regex);
+    Object.keys(mappedData).forEach(label => {
+      const value = mappedData[label];
+      const regex = new RegExp(`{{\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*}}`, 'gi');
       
-      return parts.map((part, i) => {
-        if (part.startsWith('{{') && part.endsWith('}}')) {
-          const label = part.replace(/^{{\s*/, '').replace(/\s*}}$/, '');
-          const value = mappedData[label];
-          if (value !== undefined) {
-            if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
-              return <Image key={`img-${i}`} source={{ uri: value }} style={{ width: '100%', height: 150, resizeMode: 'contain', marginVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }} />;
-            } else if (Array.isArray(value)) {
-              if (value.length === 0) return <Text key={`tbl-${i}`} style={{ fontStyle: 'italic', color: '#9CA3AF', marginVertical: 8 }}>Tabla sin datos</Text>;
-              const cols = Object.keys(value[0]);
-              return (
-                <View key={`tbl-${i}`} style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, marginVertical: 8, overflow: 'hidden' }}>
-                  <ScrollView horizontal>
-                    <View>
-                      <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', padding: 8, borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
-                        {cols.map(c => <Text key={`th-${c}`} style={{ width: 100, fontWeight: 'bold', fontSize: 12, color: '#4B5563', marginRight: 8 }} numberOfLines={1}>{c}</Text>)}
-                      </View>
-                      {value.map((r: any, rIdx: number) => (
-                        <View key={`tr-${rIdx}`} style={{ flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderColor: '#F3F4F6' }}>
-                          {cols.map(c => <Text key={`td-${c}`} style={{ width: 100, fontSize: 12, color: '#374151', marginRight: 8 }} numberOfLines={2}>{String(r[c] || '')}</Text>)}
-                        </View>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              );
-            }
-            return <Text key={`val-${i}`} style={{ fontWeight: 'bold', color: '#004F9F' }}>{String(value)}</Text>;
-          }
-          return <Text key={`txt-${i}`} style={{ color: '#9CA3AF' }}>{part}</Text>;
-        }
-
-        const parseInline = (text: string) => {
-          const tokens = [];
-          let currentText = '';
-          let b = false, it = false, s = false;
-          for (let idx = 0; idx < text.length; idx++) {
-            if (text.startsWith('**', idx)) {
-              if (currentText) tokens.push({ text: currentText, b, it, s });
-              currentText = '';
-              b = !b;
-              idx += 1;
-            } else if (text.startsWith('_', idx)) {
-              if (currentText) tokens.push({ text: currentText, b, it, s });
-              currentText = '';
-              it = !it;
-            } else if (text.startsWith('~', idx)) {
-              if (currentText) tokens.push({ text: currentText, b, it, s });
-              currentText = '';
-              s = !s;
-            } else {
-              currentText += text[idx];
-            }
-          }
-          if (currentText) tokens.push({ text: currentText, b, it, s });
-          return tokens.map((t, idx) => {
-            const st: any = {};
-            if (t.b) st.fontWeight = 'bold';
-            if (t.it) st.fontStyle = 'italic';
-            if (t.s) st.textDecorationLine = 'line-through';
-            return <Text key={`t-${i}-${idx}`} style={st}>{t.text}</Text>;
-          });
-        };
-
-        return <Text key={`chunk-${i}`}>{parseInline(part)}</Text>;
-      });
-    };
-
-    lines.forEach((line, index) => {
-      if (line.trim() === '/==') {
-        inBox = true;
-        return;
-      }
-      if (line.trim() === '==/') {
-        inBox = false;
-        blocks.push(
-          <View key={`box-${index}`} style={{ borderWidth: 2, borderColor: '#374151', padding: 12, borderRadius: 8, marginVertical: 12 }}>
-            {currentBoxContent}
-          </View>
-        );
-        currentBoxContent = [];
-        return;
-      }
-
-      let isH1 = false, isH2 = false, isH3 = false, isH4 = false;
-      let align: 'left' | 'right' | 'center' | 'justify' = 'justify';
-      let textToRender = line.trim();
-
-      const h1Match = textToRender.match(/\(\s*h1\s*\)(.*?)\(\s*\/h1\s*\)/i);
-      if (h1Match) { isH1 = true; textToRender = textToRender.replace(h1Match[0], h1Match[1]).trim(); }
-      const h2Match = textToRender.match(/\(\s*h2\s*\)(.*?)\(\s*\/h2\s*\)/i);
-      if (h2Match) { isH2 = true; textToRender = textToRender.replace(h2Match[0], h2Match[1]).trim(); }
-      const h3Match = textToRender.match(/\(\s*h3\s*\)(.*?)\(\s*\/h3\s*\)/i);
-      if (h3Match) { isH3 = true; textToRender = textToRender.replace(h3Match[0], h3Match[1]).trim(); }
-      const h4Match = textToRender.match(/\(\s*h4\s*\)(.*?)\(\s*\/h4\s*\)/i);
-      if (h4Match) { isH4 = true; textToRender = textToRender.replace(h4Match[0], h4Match[1]).trim(); }
-
-      const jMatch = textToRender.match(/\(\s*j\s*\)(.*?)\(\s*\/j\s*\)/i);
-      if (jMatch) { align = 'justify'; textToRender = textToRender.replace(jMatch[0], jMatch[1]).trim(); }
-      const rMatch = textToRender.match(/\(\s*r\s*\)(.*?)\(\s*\/r\s*\)/i);
-      if (rMatch) { align = 'right'; textToRender = textToRender.replace(rMatch[0], rMatch[1]).trim(); }
-      const lMatch = textToRender.match(/\(\s*l\s*\)(.*?)\(\s*\/l\s*\)/i);
-      if (lMatch) { align = 'left'; textToRender = textToRender.replace(lMatch[0], lMatch[1]).trim(); }
-
-      const contentElements = renderTextContent(textToRender, index);
-
-      let element;
-      if (isH1) element = <Text key={`line-${index}`} style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', marginTop: 14, marginBottom: 6, textAlign: align }}>{contentElements}</Text>;
-      else if (isH2) element = <Text key={`line-${index}`} style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', marginTop: 12, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
-      else if (isH3) element = <Text key={`line-${index}`} style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 10, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
-      else if (isH4) element = <Text key={`line-${index}`} style={{ fontSize: 16, fontWeight: 'bold', color: '#111827', marginTop: 8, marginBottom: 2, textAlign: align }}>{contentElements}</Text>;
-      else if (line.trim() === '') {
-        element = <View key={`line-${index}`} style={{ height: 16 }} />;
-      } else {
-        const containsBlocks = contentElements.some((el: any) => el?.type === View || el?.type === Image || (el?.type === Text && el?.props?.style?.marginVertical));
-        if (containsBlocks) {
-          element = <View key={`line-${index}`} style={{ marginBottom: 4 }}>{contentElements}</View>;
-        } else {
-          element = <Text key={`line-${index}`} style={{ fontSize: 14, color: '#4B5563', lineHeight: 22, marginBottom: 4, textAlign: align }}>{contentElements}</Text>;
-        }
-      }
-
-      if (inBox) {
-        currentBoxContent.push(element);
-      } else {
-        blocks.push(element);
+      if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+        const placeholder = `__IMG_${label.replace(/\s+/g, '_')}__`;
+        processed = processed.replace(regex, placeholder);
+        blockTokens.push({ placeholder, type: 'image', value });
+      } else if (Array.isArray(value)) {
+        const placeholder = `__TBL_${label.replace(/\s+/g, '_')}__`;
+        processed = processed.replace(regex, placeholder);
+        blockTokens.push({ placeholder, type: 'table', value });
+      } else if (value !== undefined) {
+        processed = processed.replace(regex, String(value));
       }
     });
 
-    if (currentBoxContent.length > 0) {
-      blocks.push(
-        <View key={`box-end`} style={{ borderWidth: 2, borderColor: '#374151', padding: 12, borderRadius: 8, marginVertical: 12 }}>
-          {currentBoxContent}
-        </View>
-      );
+    // Decode HTML entities
+    const decodeEntities = (str: string) => str
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/&nbsp;/g, ' ');
+
+    // Strip all HTML tags from a string
+    const stripHtml = (str: string) => decodeEntities(str.replace(/<[^>]*>/g, ''));
+
+    // Parse inline HTML formatting into styled Text elements
+    const renderInlineHtml = (html: string, baseKey: string): React.ReactNode[] => {
+      const elements: React.ReactNode[] = [];
+      let cleaned = html.replace(/<\/?(?:p|div|br)[^>]*>/gi, ' ');
+      
+      // Check for block placeholders (images/tables)
+      for (const bt of blockTokens) {
+        if (cleaned.includes(bt.placeholder)) {
+          const parts = cleaned.split(bt.placeholder);
+          parts.forEach((part, idx) => {
+            const trimmedPart = stripHtml(part).trim();
+            if (trimmedPart) {
+              elements.push(<Text key={`${baseKey}-part-${idx}`} style={{ fontSize: 14, color: '#4B5563' }}>{trimmedPart}</Text>);
+            }
+            if (idx < parts.length - 1) {
+              if (bt.type === 'image') {
+                elements.push(
+                  <Image
+                    key={`${baseKey}-img-${idx}`}
+                    source={{ uri: bt.value }}
+                    style={{ width: '100%', height: 150, resizeMode: 'contain', marginVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}
+                  />
+                );
+              } else if (bt.type === 'table' && bt.value.length > 0) {
+                const cols = Object.keys(bt.value[0]);
+                elements.push(
+                  <View key={`${baseKey}-tbl-${idx}`} style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, marginVertical: 8, overflow: 'hidden' }}>
+                    <ScrollView horizontal>
+                      <View>
+                        <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', padding: 8, borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
+                          {cols.map(c => <Text key={`th-${c}`} style={{ width: 100, fontWeight: 'bold', fontSize: 12, color: '#4B5563', marginRight: 8 }} numberOfLines={1}>{c}</Text>)}
+                        </View>
+                        {bt.value.map((r: any, rIdx: number) => (
+                          <View key={`tr-${rIdx}`} style={{ flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderColor: '#F3F4F6' }}>
+                            {cols.map(c => <Text key={`td-${c}`} style={{ width: 100, fontSize: 12, color: '#374151', marginRight: 8 }} numberOfLines={2}>{String(r[c] || '')}</Text>)}
+                          </View>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+                );
+              }
+            }
+          });
+          return elements;
+        }
+      }
+
+      // Parse inline formatting tags
+      const tokens: { text: string; bold: boolean; italic: boolean; underline: boolean; strike: boolean }[] = [];
+      let currentText = '';
+      let bold = false, italic = false, underline = false, strike = false;
+      let i = 0;
+
+      while (i < cleaned.length) {
+        if (cleaned[i] === '<') {
+          const tagEnd = cleaned.indexOf('>', i);
+          if (tagEnd === -1) {
+            currentText += cleaned[i];
+            i++;
+            continue;
+          }
+          const tagStr = cleaned.substring(i, tagEnd + 1);
+          if (currentText) {
+            tokens.push({ text: decodeEntities(currentText), bold, italic, underline, strike });
+            currentText = '';
+          }
+          if (/<strong[^>]*>/i.test(tagStr)) bold = true;
+          else if (/<\/strong>/i.test(tagStr)) bold = false;
+          else if (/<em[^>]*>/i.test(tagStr)) italic = true;
+          else if (/<\/em>/i.test(tagStr)) italic = false;
+          else if (/<u[^>]*>/i.test(tagStr)) underline = true;
+          else if (/<\/u>/i.test(tagStr)) underline = false;
+          else if (/<s[^>]*>/i.test(tagStr)) strike = true;
+          else if (/<\/s>/i.test(tagStr)) strike = false;
+          i = tagEnd + 1;
+        } else {
+          currentText += cleaned[i];
+          i++;
+        }
+      }
+      if (currentText) {
+        tokens.push({ text: decodeEntities(currentText), bold, italic, underline, strike });
+      }
+
+      return tokens.map((t, idx) => {
+        const st: any = {};
+        if (t.bold) st.fontWeight = 'bold';
+        if (t.italic) st.fontStyle = 'italic';
+        if (t.underline) st.textDecorationLine = 'underline';
+        if (t.strike) st.textDecorationLine = 'line-through';
+        return <Text key={`${baseKey}-t-${idx}`} style={st}>{t.text}</Text>;
+      });
+    };
+
+    // Parse HTML block elements
+    const blocks: React.ReactNode[] = [];
+    
+    // Remove list wrappers, normalize
+    let htmlContent = processed
+      .replace(/<\/?ul[^>]*>/gi, '')
+      .replace(/<\/?ol[^>]*>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n');
+
+    const blockPattern = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
+    let blockIndex = 0;
+    let match;
+    let foundBlocks = false;
+
+    while ((match = blockPattern.exec(htmlContent)) !== null) {
+      foundBlocks = true;
+      const tag = match[1].toLowerCase();
+      const attrs = match[2] || '';
+      const content = match[3];
+
+      // Get alignment from style attribute
+      let align: 'left' | 'right' | 'center' | 'justify' = 'left';
+      const styleMatch = attrs.match(/style="[^"]*text-align:\s*(left|center|right|justify)/i);
+      if (styleMatch) {
+        align = styleMatch[1].toLowerCase() as typeof align;
+      }
+
+      const key = `block-${blockIndex++}`;
+
+      if (tag === 'hr') {
+        blocks.push(<View key={key} style={{ borderBottomWidth: 1, borderColor: '#E5E7EB', marginVertical: 12 }} />);
+      } else if (tag === 'h1') {
+        blocks.push(
+          <Text key={key} style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', marginTop: 14, marginBottom: 6, textAlign: align }}>
+            {renderInlineHtml(content, key)}
+          </Text>
+        );
+      } else if (tag === 'h2') {
+        blocks.push(
+          <Text key={key} style={{ fontSize: 20, fontWeight: 'bold', color: '#111827', marginTop: 12, marginBottom: 4, textAlign: align }}>
+            {renderInlineHtml(content, key)}
+          </Text>
+        );
+      } else if (tag === 'h3') {
+        blocks.push(
+          <Text key={key} style={{ fontSize: 18, fontWeight: 'bold', color: '#111827', marginTop: 10, marginBottom: 4, textAlign: align }}>
+            {renderInlineHtml(content, key)}
+          </Text>
+        );
+      } else if (tag === 'li') {
+        blocks.push(
+          <View key={key} style={{ flexDirection: 'row', marginBottom: 4, paddingLeft: 8 }}>
+            <Text style={{ fontSize: 14, color: '#4B5563', marginRight: 6 }}>•</Text>
+            <Text style={{ fontSize: 14, color: '#4B5563', lineHeight: 22, flex: 1, textAlign: align }}>
+              {renderInlineHtml(content, key)}
+            </Text>
+          </View>
+        );
+      } else if (tag === 'blockquote') {
+        blocks.push(
+          <View key={key} style={{ borderLeftWidth: 3, borderLeftColor: '#E5E7EB', paddingLeft: 12, marginVertical: 8 }}>
+            <Text style={{ fontSize: 14, color: '#6B7280', fontStyle: 'italic', lineHeight: 22, textAlign: align }}>
+              {renderInlineHtml(content, key)}
+            </Text>
+          </View>
+        );
+      } else {
+        // Default: <p> tag
+        const inlineElements = renderInlineHtml(content, key);
+        // Check if it contains block elements (images/tables)
+        const hasBlockElements = inlineElements.some((el: any) => 
+          el?.type === View || el?.type === Image
+        );
+        if (hasBlockElements) {
+          blocks.push(
+            <View key={key} style={{ marginBottom: 4 }}>
+              {inlineElements}
+            </View>
+          );
+        } else {
+          const plainText = stripHtml(content).trim();
+          if (!plainText) {
+            blocks.push(<View key={key} style={{ height: 8 }} />);
+          } else {
+            blocks.push(
+              <Text key={key} style={{ fontSize: 14, color: '#4B5563', lineHeight: 22, marginBottom: 4, textAlign: align }}>
+                {inlineElements}
+              </Text>
+            );
+          }
+        }
+      }
+    }
+
+    // If no HTML blocks found, fall back to rendering plain text
+    if (!foundBlocks) {
+      const plainText = stripHtml(processed).trim();
+      if (plainText) {
+        blocks.push(
+          <Text key="fallback" style={{ fontSize: 14, color: '#4B5563', lineHeight: 22 }}>
+            {plainText}
+          </Text>
+        );
+      }
     }
 
     return <View>{blocks}</View>;

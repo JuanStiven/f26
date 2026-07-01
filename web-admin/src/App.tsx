@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MainLayout } from './components/layout/main-layout';
 import { LoginPage } from './components/auth/login';
 import { FileExplorer } from './components/explorer/file-explorer';
+import { RichTextEditor } from './components/RichTextEditor';
+import { TemplatePreview } from './components/TemplatePreview';
 import { 
   FileText, 
   Users, 
@@ -24,7 +26,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Pencil,
+  FileCode
 } from 'lucide-react';
 
 interface TemplateField {
@@ -43,6 +47,7 @@ interface Template {
   id: string;
   name: string;
   description: string;
+  descriptionStyles?: string;
   fields: TemplateField[];
   createdAt: string;
   storagePath?: string;
@@ -338,6 +343,8 @@ export default function App() {
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
   const [documentModal, setDocumentModal] = useState<any>(null);
+  const [descriptionStyles, setDescriptionStyles] = useState('');
+  const [activeEditorTab, setActiveEditorTab] = useState<'editor' | 'styles' | 'preview'>('editor');
 
   // Pagination, Sorting and Filtering for Documents
   const [docSearchTerm, setDocSearchTerm] = useState('');
@@ -573,6 +580,7 @@ export default function App() {
       const payload = {
         name: newTemplate.name,
         description: newTemplate.description || '',
+        descriptionStyles: descriptionStyles || '',
         storagePath: newTemplate.storagePath || 'Raíz',
         fields: newTemplate.fields || [],
         assignedUsers: newTemplate.assignedUsers?.map((u: any) => u.id) || [],
@@ -587,6 +595,7 @@ export default function App() {
         if (response.data.success) {
           setTemplates(prev => prev.map(t => t.id === newTemplate.id ? response.data.data : t));
           setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
+          setDescriptionStyles('');
           alert('Plantilla actualizada con éxito.');
         }
       } else {
@@ -594,6 +603,7 @@ export default function App() {
         if (response.data.success) {
           setTemplates(prev => [...prev, response.data.data]);
           setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
+          setDescriptionStyles('');
           alert('Plantilla guardada con éxito.');
         }
       }
@@ -1004,25 +1014,85 @@ export default function App() {
               )}
 
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Cuerpo del Documento</label>
-                <div className="flex flex-col text-[10px] text-muted-foreground italic mt-1">
-                  <span className="text-primary font-medium">Instrucciones de formato:</span>
-                  <ul className="list-disc list-inside space-y-1 mb-2 mt-1">
-                    <li>Envuelve el texto en <code className="bg-muted px-1 rounded">/==</code> y <code className="bg-muted px-1 rounded">==/</code> para dibujar un recuadro (bordes) alrededor.</li>
-                    <li>Usa <code className="bg-muted px-1 rounded">(h1)</code> a <code className="bg-muted px-1 rounded">(h4)</code> con su cierre, ej: <code className="bg-muted px-1 rounded">(h2) Título (/h2)</code>.</li>
-                    <li>Alineación (al inicio de línea): <code className="bg-muted px-1 rounded">(j)</code> justificado, <code className="bg-muted px-1 rounded">(r)</code> derecha, <code className="bg-muted px-1 rounded">(l)</code> izquierda. Cierre: <code className="bg-muted px-1 rounded">(/j)</code>.</li>
-                    <li>Estilos de texto: <code className="bg-muted px-1 rounded">**negrita**</code>, <code className="bg-muted px-1 rounded">_cursiva_</code>, y <code className="bg-muted px-1 rounded">~tachado~</code>.</li>
-                    <li>Los saltos de línea se respetarán en el PDF final.</li>
-                  </ul>
-                  <span className="self-end">Usa el botón "Insertar" en tus campos para agregar variables aquí</span>
+                <label className="text-xs font-medium text-muted-foreground">Contenido del Documento</label>
+                <p className="text-[10px] text-muted-foreground">Edita visualmente o ajusta los estilos CSS y previsualiza el resultado</p>
+
+                {/* Tabs: Editor | Estilos CSS | Vista Previa */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="flex border-b border-border bg-muted/30">
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditorTab('editor')}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${
+                        activeEditorTab === 'editor'
+                          ? 'bg-card text-primary border-b-2 border-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditorTab('styles')}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${
+                        activeEditorTab === 'styles'
+                          ? 'bg-card text-primary border-b-2 border-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <FileCode className="h-3.5 w-3.5" />
+                      Estilos CSS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditorTab('preview')}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${
+                        activeEditorTab === 'preview'
+                          ? 'bg-card text-primary border-b-2 border-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Vista Previa
+                    </button>
+                  </div>
+
+                  <div className="bg-card">
+                    {activeEditorTab === 'editor' && (
+                      <RichTextEditor
+                        value={newTemplate.description || ''}
+                        onChange={(html) => setNewTemplate(prev => ({ ...prev, description: html }))}
+                        placeholder="Escribe el contenido del documento..."
+                        fieldLabels={(newTemplate.fields || []).map(f => f.label)}
+                      />
+                    )}
+
+                    {activeEditorTab === 'styles' && (
+                      <div className="p-4 space-y-2">
+                        <textarea
+                          value={descriptionStyles}
+                          onChange={(e) => setDescriptionStyles(e.target.value)}
+                          placeholder=".template-preview-content h1 { color: #1d4ed8; }\n.template-preview-content p { line-height: 1.8; }"
+                          className="w-full text-xs p-3 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none min-h-[360px] resize-y font-mono"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          CSS aplicado al renderizar el documento. Usa selectores dentro de{' '}
+                          <code className="font-mono bg-muted px-1 rounded">.template-preview-content</code>.
+                        </p>
+                      </div>
+                    )}
+
+                    {activeEditorTab === 'preview' && (
+                      <div className="p-4 rounded-lg bg-secondary/30">
+                        <TemplatePreview
+                          body={newTemplate.description || ''}
+                          styles={descriptionStyles}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <textarea 
-                  ref={descriptionRef}
-                  placeholder="Ej. /==\n(h2)DATOS PERSONALES\nYo **{{Nombre Empleado}}** identificado con número de documento **{{Cédula}}** certifico que...\n==/"
-                  value={newTemplate.description || ''}
-                  onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full text-xs p-3 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none min-h-[200px] resize-y font-mono"
-                />
               </div>
 
               {/* Agregar nuevo campo */}
@@ -1288,7 +1358,11 @@ export default function App() {
 
                 <div className="space-y-2">
                   <h4 className="text-sm font-bold text-primary">{newTemplate.name || 'Sin Título de Plantilla'}</h4>
-                  <MarkdownRenderer text={newTemplate.description || 'Sin descripción'} />
+                  <TemplatePreview
+                    body={newTemplate.description || '<p style="color:#9ca3af">Sin descripción</p>'}
+                    styles={descriptionStyles}
+                    className="!shadow-none [&>div]:!px-4 [&>div]:!py-4 [&>div]:!rounded-none"
+                  />
                 </div>
 
                 <div className="h-px bg-border/80 my-4" />
@@ -1416,6 +1490,8 @@ export default function App() {
                           qualityVersion: t.qualityVersion || '',
                           qualityDate: t.qualityDate || ''
                         });
+                        setDescriptionStyles((t as any).descriptionStyles || '');
+                        setActiveEditorTab('editor');
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
                       className="p-1.5 rounded hover:bg-muted text-primary"
@@ -2404,7 +2480,11 @@ export default function App() {
               <div className="space-y-2">
                 <h4 className="text-sm font-bold text-primary">{previewTemplate.name || 'Sin Título de Plantilla'}</h4>
                 <div className="max-h-[300px] overflow-y-auto">
-                  <MarkdownRenderer text={previewTemplate.description || 'Sin descripción'} />
+                  <TemplatePreview
+                    body={previewTemplate.description || '<p style="color:#9ca3af">Sin descripción</p>'}
+                    styles={(previewTemplate as any).descriptionStyles || ''}
+                    className="!shadow-none [&>div]:!px-4 [&>div]:!py-4 [&>div]:!rounded-none"
+                  />
                 </div>
               </div>
 
@@ -2650,7 +2730,12 @@ export default function App() {
 
                 return (
                   <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                    <MarkdownRenderer text={description} data={mappedData} />
+                    <TemplatePreview
+                      body={description}
+                      styles={(documentModal.template as any)?.descriptionStyles || ''}
+                      data={mappedData}
+                      className="!shadow-none [&>div]:!px-4 [&>div]:!py-4 [&>div]:!rounded-none [&>div]:!bg-transparent"
+                    />
                   </div>
                 );
               })()}

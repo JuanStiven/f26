@@ -7,7 +7,7 @@ export async function getAllDocuments() {
   const docs = await prisma.signedDocument.findMany({
     orderBy: { createdAt: 'desc' },
     include: {
-      template: { select: { name: true, storagePath: true, description: true, fields: true } },
+      template: { select: { name: true, storagePath: true, description: true, descriptionStyles: true, fields: true } },
       filledBy: { select: { name: true, document: true } },
     },
   });
@@ -24,7 +24,7 @@ export async function getDocumentsByUserId(userId: string) {
     where: { filledById: userId },
     orderBy: { createdAt: 'desc' },
     include: {
-      template: { select: { name: true, description: true, fields: true } }
+      template: { select: { name: true, description: true, descriptionStyles: true, fields: true } }
     },
   });
 
@@ -242,14 +242,13 @@ export async function createDocument(data: {
       }
     });
 
+    // 2. Replace {{variable}} tokens with actual data values
     const blockTokens: any[] = [];
 
-    // 2. Reemplazar variables dinámicas y extraer tablas/imágenes como bloques
     Object.entries(data.formData).forEach(([key, value]) => {
       const fieldDef = fields?.find(f => f.id === key);
       if (fieldDef && fieldDef.label) {
-        // Encontrar todas las ocurrencias sin case-sensitivity
-        const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
+        const regex = new RegExp(`{{\\s*${fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*}}`, 'gi');
         
         if (typeof value === 'string' && value.startsWith('data:image/')) {
           const placeholder = `__IMAGE_BLOCK_${key}__`;
@@ -264,192 +263,260 @@ export async function createDocument(data: {
              blockTokens.push({ placeholder, type: 'table', value });
           }
         } else {
-          // Es un texto o número normal, se reemplaza inline
           formattedDescription = formattedDescription.replace(regex, String(value));
         }
       }
     });
 
-    // 3. Partir la descripción en texto plano y bloques visuales
-    let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
+    // 3. Simple HTML-to-PDF renderer
+    // Strip HTML tags and render formatted content
+    const renderHtmlToPdf = (html: string) => {
+      // Split into blocks based on HTML block-level elements
+      // Process: remove outer tags, handle inline formatting
+      const stripHtml = (str: string) => str.replace(/<[^>]*>/g, '');
+      
+      // Parse HTML into structural blocks
+      const blockRegex = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>|<hr\s*\/?>/gi;
+      let lastIndex = 0;
+      let match;
+      const blocks: { tag: string; content: string; attrs: string }[] = [];
+      
+      // Also handle text that's not wrapped in tags
+      const tempHtml = html
+        // Normalize self-closing hr
+        .replace(/<hr\s*\/?>/gi, '<hr></hr>')
+        // Wrap bare text lines in <p>
+        .replace(/^([^<]+)$/gm, '<p>$1</p>');
 
-    blockTokens.forEach(block => {
-      let newFinalBlocks: any[] = [];
-      finalBlocks.forEach(fb => {
-        if (fb.type === 'text') {
-           const parts = fb.content.split(block.placeholder);
-           parts.forEach((part: string, idx: number) => {
-             if (part) newFinalBlocks.push({ type: 'text', content: part });
-             if (idx < parts.length - 1) newFinalBlocks.push(block);
-           });
-        } else {
-           newFinalBlocks.push(fb);
-        }
-      });
-      finalBlocks = newFinalBlocks;
-    });
+      const blockPattern = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
+      
+      // Handle list wrappers - extract <li> from <ul>/<ol>
+      let processedHtml = tempHtml
+        .replace(/<\/?ul[^>]*>/gi, '')
+        .replace(/<\/?ol[^>]*>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n');
 
-    // 4. Renderizar cada bloque en el PDF secuencialmente
-    let inBox = false;
-    let boxStartY = 0;
-
-    finalBlocks.forEach(block => {
-      if (block.type === 'text') {
-        const lines = block.content.split('\n');
+      while ((match = blockPattern.exec(processedHtml)) !== null) {
+        const tag = match[1].toLowerCase();
+        const attrs = match[2] || '';
+        const content = match[3];
+        blocks.push({ tag, content, attrs });
+      }
+      
+      // If no blocks found, treat the entire content as one paragraph
+      if (blocks.length === 0 && stripHtml(processedHtml).trim()) {
+        blocks.push({ tag: 'p', content: processedHtml, attrs: '' });
+      }
+      
+      blocks.forEach(block => {
+        // Check for block-level image/table placeholders
+        const plainContent = stripHtml(block.content);
         
-        lines.forEach((line: string) => {
-          if (line.trim() === '/==') {
-            doc.moveDown(0.5);
-            inBox = true;
-            boxStartY = doc.y;
-            return;
-          }
-          if (line.trim() === '==/') {
-            inBox = false;
-            const boxEndY = doc.y;
-            doc.lineWidth(1).strokeColor('#000000');
-            // Draw rectangle from start to current Y
-            doc.rect(40, boxStartY - 5, doc.page.width - 80, boxEndY - boxStartY + 10).stroke();
-            doc.moveDown(0.5);
-            return;
-          }
-          
-          if (line.trim() === '') {
-            doc.moveDown(0.5);
-            return;
-          }
-
-          let align: 'left' | 'center' | 'right' | 'justify' = 'justify';
-          let isH1 = false, isH2 = false, isH3 = false, isH4 = false;
-          let textToRender = line.trim();
-
-          const h1Match = textToRender.match(/\(\s*h1\s*\)(.*?)\(\s*\/h1\s*\)/i);
-          if (h1Match) { isH1 = true; textToRender = textToRender.replace(h1Match[0], h1Match[1]).trim(); }
-          const h2Match = textToRender.match(/\(\s*h2\s*\)(.*?)\(\s*\/h2\s*\)/i);
-          if (h2Match) { isH2 = true; textToRender = textToRender.replace(h2Match[0], h2Match[1]).trim(); }
-          const h3Match = textToRender.match(/\(\s*h3\s*\)(.*?)\(\s*\/h3\s*\)/i);
-          if (h3Match) { isH3 = true; textToRender = textToRender.replace(h3Match[0], h3Match[1]).trim(); }
-          const h4Match = textToRender.match(/\(\s*h4\s*\)(.*?)\(\s*\/h4\s*\)/i);
-          if (h4Match) { isH4 = true; textToRender = textToRender.replace(h4Match[0], h4Match[1]).trim(); }
-
-          const jMatch = textToRender.match(/\(\s*j\s*\)(.*?)\(\s*\/j\s*\)/i);
-          if (jMatch) { align = 'justify'; textToRender = textToRender.replace(jMatch[0], jMatch[1]).trim(); }
-          const rMatch = textToRender.match(/\(\s*r\s*\)(.*?)\(\s*\/r\s*\)/i);
-          if (rMatch) { align = 'right'; textToRender = textToRender.replace(rMatch[0], rMatch[1]).trim(); }
-          const lMatch = textToRender.match(/\(\s*l\s*\)(.*?)\(\s*\/l\s*\)/i);
-          if (lMatch) { align = 'left'; textToRender = textToRender.replace(lMatch[0], lMatch[1]).trim(); }
-
-          let baseSize = paragraphFontSize;
-          if (isH1) baseSize = paragraphFontSize + 6;
-          else if (isH2) baseSize = paragraphFontSize + 4;
-          else if (isH3) baseSize = paragraphFontSize + 2;
-          else if (isH4) baseSize = paragraphFontSize;
-
-          doc.fillColor('#000000');
-          doc.fontSize(baseSize);
-
-          const parseInline = (text: string) => {
-            const tokens = [];
-            let currentText = '';
-            let b = false, i = false, s = false;
-            for (let idx = 0; idx < text.length; idx++) {
-              if (text.startsWith('**', idx)) {
-                if (currentText) tokens.push({ text: currentText, b, i, s });
-                currentText = '';
-                b = !b;
-                idx += 1;
-              } else if (text.startsWith('_', idx)) {
-                if (currentText) tokens.push({ text: currentText, b, i, s });
-                currentText = '';
-                i = !i;
-              } else if (text.startsWith('~', idx)) {
-                if (currentText) tokens.push({ text: currentText, b, i, s });
-                currentText = '';
-                s = !s;
-              } else {
-                currentText += text[idx];
+        // Handle inline image/table blocks
+        for (const bt of blockTokens) {
+          if (plainContent.includes(bt.placeholder)) {
+            const parts = plainContent.split(bt.placeholder);
+            parts.forEach((part, idx) => {
+              const trimmedPart = part.trim();
+              if (trimmedPart) {
+                doc.font('Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
+                doc.text(trimmedPart, { align: 'justify' });
               }
-            }
-            if (currentText) tokens.push({ text: currentText, b, i, s });
-            return tokens;
-          };
+              if (idx < parts.length - 1) {
+                if (bt.type === 'image') {
+                  try {
+                    const base64Data = bt.value.replace(/^data:image\/\w+;base64,/, "");
+                    const imgBuffer = Buffer.from(base64Data, 'base64');
+                    checkPageBreak(160);
+                    doc.moveDown(0.5);
+                    doc.image(imgBuffer, { width: 150 });
+                    doc.moveDown(0.5);
+                  } catch(e) {
+                    doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Error cargando imagen]`);
+                  }
+                } else if (bt.type === 'table') {
+                  const tValue = bt.value;
+                  if (tValue.length > 0) {
+                    const cols = Object.keys(tValue[0]);
+                    const startX = 50;
+                    const tableWidth = 500;
+                    const colWidth = tableWidth / cols.length;
 
-          const tokens = parseInline(textToRender);
+                    doc.moveDown(0.5);
+                    const headerY = doc.y;
+                    doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000');
+                    cols.forEach((col: string, idx: number) => {
+                      doc.text(col, startX + (idx * colWidth), headerY, { width: colWidth - 5, align: 'left' });
+                    });
+                    doc.y = headerY + 12;
+                    doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(1).strokeColor('#004F9F').stroke();
+                    doc.y += 5;
 
-          if (tokens.length === 0) return;
+                    doc.font('Helvetica').fontSize(9).fillColor('#4B5563');
+                    tValue.forEach((row: any) => {
+                      checkPageBreak(25);
+                      const rowY = doc.y;
+                      let maxRowHeight = 12;
+                      cols.forEach((col: string, idx: number) => {
+                        const valStr = String(row[col] || '');
+                        doc.text(valStr, startX + (idx * colWidth), rowY, { width: colWidth - 5, align: 'left' });
+                        const currentHeight = doc.y - rowY;
+                        if (currentHeight > maxRowHeight) maxRowHeight = currentHeight;
+                      });
+                      doc.y = rowY + maxRowHeight;
+                      doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
+                      doc.y += 5;
+                    });
+                    doc.x = 50;
+                    doc.moveDown(0.5);
+                  }
+                }
+              }
+            });
+            return; // Block fully handled
+          }
+        }
+        
+        if (block.tag === 'hr') {
+          doc.moveDown(0.3);
+          doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#cccccc').stroke();
+          doc.moveDown(0.5);
+          return;
+        }
+
+        // Determine alignment from style attribute
+        let align: 'left' | 'center' | 'right' | 'justify' = 'justify';
+        const styleMatch = block.attrs.match(/style="[^"]*text-align:\s*(left|center|right|justify)/i);
+        if (styleMatch) {
+          align = styleMatch[1].toLowerCase() as typeof align;
+        }
+
+        // Determine font size and weight based on tag
+        let fontSize = paragraphFontSize;
+        let defaultFont = 'Helvetica';
+        
+        if (block.tag === 'h1') {
+          fontSize = paragraphFontSize + 6;
+          defaultFont = 'Helvetica-Bold';
+          checkPageBreak(fontSize + 10);
+        } else if (block.tag === 'h2') {
+          fontSize = paragraphFontSize + 4;
+          defaultFont = 'Helvetica-Bold';
+          checkPageBreak(fontSize + 8);
+        } else if (block.tag === 'h3') {
+          fontSize = paragraphFontSize + 2;
+          defaultFont = 'Helvetica-Bold';
+          checkPageBreak(fontSize + 6);
+        } else if (block.tag === 'blockquote') {
+          // Indent blockquotes
+          doc.x = 70;
+        } else if (block.tag === 'li') {
+          // Add bullet point
+          doc.font('Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
+          doc.text('• ', { continued: true, align: 'left' });
+        }
+
+        // Parse inline formatting: <strong>, <em>, <u>, <s>, <a>
+        const inlineTokens: { text: string; bold: boolean; italic: boolean; underline: boolean; strike: boolean }[] = [];
+        let tempContent = block.content;
+        
+        // Simple inline tag parsing
+        const parseInlineHtml = (htmlContent: string) => {
+          const tokens: typeof inlineTokens = [];
+          // Remove nested block tags that might be inside
+          let cleaned = htmlContent.replace(/<\/?(?:p|div|br)[^>]*>/gi, ' ');
           
-          if (tokens.length === 1) {
-            const t = tokens[0];
-            let fontName = 'Helvetica';
-            const isBold = isH1 || isH2 || isH3 || isH4 || t.b;
-            if (isBold && t.i) fontName = 'Helvetica-BoldOblique';
-            else if (isBold) fontName = 'Helvetica-Bold';
-            else if (t.i) fontName = 'Helvetica-Oblique';
-            doc.font(fontName).text(t.text, { align, strike: t.s });
-          } else {
-            tokens.forEach((t, i) => {
-              let fontName = 'Helvetica';
-              const isBold = isH1 || isH2 || isH3 || isH4 || t.b;
-              if (isBold && t.i) fontName = 'Helvetica-BoldOblique';
-              else if (isBold) fontName = 'Helvetica-Bold';
-              else if (t.i) fontName = 'Helvetica-Oblique';
+          // Track state through tag stack
+          let currentText = '';
+          let bold = false, italic = false, underline = false, strike = false;
+          let i = 0;
+          
+          while (i < cleaned.length) {
+            if (cleaned[i] === '<') {
+              // Find end of tag
+              const tagEnd = cleaned.indexOf('>', i);
+              if (tagEnd === -1) {
+                currentText += cleaned[i];
+                i++;
+                continue;
+              }
+              const tagStr = cleaned.substring(i, tagEnd + 1);
               
-              doc.font(fontName).text(t.text, { continued: i < tokens.length - 1, align, strike: t.s });
+              // Push current text before state change
+              if (currentText) {
+                tokens.push({ text: currentText, bold, italic, underline, strike });
+                currentText = '';
+              }
+              
+              // Process tag
+              if (/<strong[^>]*>/i.test(tagStr)) bold = true;
+              else if (/<\/strong>/i.test(tagStr)) bold = false;
+              else if (/<em[^>]*>/i.test(tagStr)) italic = true;
+              else if (/<\/em>/i.test(tagStr)) italic = false;
+              else if (/<u[^>]*>/i.test(tagStr)) underline = true;
+              else if (/<\/u>/i.test(tagStr)) underline = false;
+              else if (/<s[^>]*>/i.test(tagStr)) strike = true;
+              else if (/<\/s>/i.test(tagStr)) strike = false;
+              // Skip other tags silently
+              
+              i = tagEnd + 1;
+            } else {
+              currentText += cleaned[i];
+              i++;
+            }
+          }
+          if (currentText) {
+            tokens.push({ text: currentText, bold, italic, underline, strike });
+          }
+          return tokens;
+        };
+
+        const tokens = parseInlineHtml(tempContent);
+        
+        doc.fillColor('#000000').fontSize(fontSize);
+        
+        if (tokens.length === 0) {
+          doc.moveDown(0.3);
+          if (block.tag === 'blockquote') doc.x = 50;
+          return;
+        }
+
+        tokens.forEach((t, i) => {
+          let fontName = defaultFont;
+          const isBold = block.tag.startsWith('h') || t.bold;
+          if (isBold && t.italic) fontName = 'Helvetica-BoldOblique';
+          else if (isBold) fontName = 'Helvetica-Bold';
+          else if (t.italic) fontName = 'Helvetica-Oblique';
+          
+          // Decode HTML entities
+          const decodedText = t.text
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&nbsp;/g, ' ');
+          
+          if (decodedText.trim() || i > 0) {
+            doc.font(fontName).text(decodedText, {
+              continued: i < tokens.length - 1,
+              align,
+              strike: t.strike,
+              underline: t.underline,
             });
           }
         });
-      } else if (block.type === 'image') {
-        try {
-          const base64Data = block.value.replace(/^data:image\/\w+;base64,/, "");
-          const imgBuffer = Buffer.from(base64Data, 'base64');
-          checkPageBreak(160);
-          doc.moveDown(0.5);
-          doc.image(imgBuffer, { width: 150 }); 
-          doc.moveDown(0.5);
-        } catch(e) {
-          doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Error cargando imagen]`);
-        }
-      } else if (block.type === 'table') {
-        const value = block.value;
-        if (value.length > 0) {
-          const cols = Object.keys(value[0]);
-          const startX = 50;
-          const tableWidth = 500;
-          const colWidth = tableWidth / cols.length;
 
-          doc.moveDown(0.5);
-          const headerY = doc.y;
-          doc.font('Helvetica-Bold').fontSize(9).fillColor('#000000');
-          cols.forEach((col: string, idx: number) => {
-            doc.text(col, startX + (idx * colWidth), headerY, { width: colWidth - 5, align: 'left' });
-          });
-          doc.y = headerY + 12;
-          doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(1).strokeColor('#004F9F').stroke();
-          doc.y += 5;
-
-          doc.font('Helvetica').fontSize(9);
-          doc.fillColor('#4B5563');
-          value.forEach((row: any) => {
-            checkPageBreak(25);
-            const rowY = doc.y;
-            let maxRowHeight = 12;
-            cols.forEach((col: string, idx: number) => {
-              const valStr = String(row[col] || '');
-              doc.text(valStr, startX + (idx * colWidth), rowY, { width: colWidth - 5, align: 'left' });
-              const currentHeight = doc.y - rowY;
-              if (currentHeight > maxRowHeight) maxRowHeight = currentHeight;
-            });
-            doc.y = rowY + maxRowHeight;
-            doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
-            doc.y += 5;
-          });
-          doc.x = 50; // Reset X
-          doc.moveDown(0.5);
-        } else {
-          doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text('Tabla sin datos');
+        // Reset indent for blockquote
+        if (block.tag === 'blockquote') doc.x = 50;
+        
+        if (block.tag.startsWith('h')) {
+          doc.moveDown(0.3);
         }
-      }
-    });
+      });
+    };
+
+    renderHtmlToPdf(formattedDescription);
 
     doc.moveDown(1.5);
   }

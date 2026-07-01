@@ -60,6 +60,7 @@ async function createTemplate(data) {
         data: {
             name: data.name,
             description: data.description || '',
+            descriptionStyles: data.descriptionStyles || '',
             storagePath: data.storagePath || '',
             fields: data.fields,
             isQualityDocument: data.isQualityDocument || false,
@@ -88,6 +89,7 @@ async function updateTemplate(id, data) {
         data: {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.description !== undefined && { description: data.description }),
+            ...(data.descriptionStyles !== undefined && { descriptionStyles: data.descriptionStyles }),
             ...(data.storagePath !== undefined && { storagePath: data.storagePath }),
             ...(data.fields !== undefined && { fields: data.fields }),
             ...(data.isQualityDocument !== undefined && { isQualityDocument: data.isQualityDocument }),

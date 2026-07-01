@@ -3,6 +3,7 @@ export declare function getAllDocuments(): Promise<{
         fields: import("@prisma/client/runtime/client").JsonValue;
         name: string;
         description: string;
+        descriptionStyles: string;
         storagePath: string;
     };
     templateSnapshot: undefined;
@@ -26,6 +27,7 @@ export declare function getDocumentsByUserId(userId: string): Promise<{
         fields: import("@prisma/client/runtime/client").JsonValue;
         name: string;
         description: string;
+        descriptionStyles: string;
     };
     templateSnapshot: undefined;
     id: string;
@@ -47,13 +49,12 @@ export declare function getDocumentById(id: string): Promise<{
         createdAt: Date;
         updatedAt: Date;
         description: string;
+        descriptionStyles: string;
         storagePath: string;
         isQualityDocument: boolean;
         qualityCode: string | null;
         qualityVersion: string | null;
         qualityDate: string | null;
-        isCreativeMode: boolean;
-        creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
     };
     templateSnapshot: undefined;
     filledBy: {

@@ -14,13 +14,12 @@ export declare function getAllTemplates(): Promise<({
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 })[]>;
 export declare function getTemplatesForUser(userId: string, role: string): Promise<({
     _count: {
@@ -33,13 +32,12 @@ export declare function getTemplatesForUser(userId: string, role: string): Promi
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 })[]>;
 export declare function getTemplateById(id: string): Promise<{
     signedDocuments: ({
@@ -67,17 +65,17 @@ export declare function getTemplateById(id: string): Promise<{
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 }>;
 export declare function createTemplate(data: {
     name: string;
     description?: string;
+    descriptionStyles?: string;
     storagePath?: string;
     fields: any[];
     assignedUsers?: string[];
@@ -103,17 +101,17 @@ export declare function createTemplate(data: {
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 }>;
 export declare function updateTemplate(id: string, data: {
     name?: string;
     description?: string;
+    descriptionStyles?: string;
     storagePath?: string;
     fields?: any[];
     assignedUsers?: string[];
@@ -139,13 +137,12 @@ export declare function updateTemplate(id: string, data: {
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 }>;
 export declare function deleteTemplate(id: string): Promise<{
     fields: import("@prisma/client/runtime/client").JsonValue;
@@ -154,11 +151,10 @@ export declare function deleteTemplate(id: string): Promise<{
     createdAt: Date;
     updatedAt: Date;
     description: string;
+    descriptionStyles: string;
     storagePath: string;
     isQualityDocument: boolean;
     qualityCode: string | null;
     qualityVersion: string | null;
     qualityDate: string | null;
-    isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue | null;
 }>;

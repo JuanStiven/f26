@@ -52,6 +52,7 @@ export async function getTemplateById(id: string) {
 export async function createTemplate(data: {
   name: string;
   description?: string;
+  descriptionStyles?: string;
   storagePath?: string;
   fields: any[];
   assignedUsers?: string[];
@@ -66,6 +67,7 @@ export async function createTemplate(data: {
     data: {
       name: data.name,
       description: data.description || '',
+      descriptionStyles: data.descriptionStyles || '',
       storagePath: data.storagePath || '',
       fields: data.fields,
       isQualityDocument: data.isQualityDocument || false,
@@ -87,7 +89,7 @@ export async function createTemplate(data: {
 
 export async function updateTemplate(
   id: string,
-  data: { name?: string; description?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; }
+  data: { name?: string; description?: string; descriptionStyles?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; }
 ) {
   const exists = await prisma.template.findUnique({ where: { id } });
   if (!exists) {
@@ -99,6 +101,7 @@ export async function updateTemplate(
     data: {
       ...(data.name !== undefined && { name: data.name }),
       ...(data.description !== undefined && { description: data.description }),
+      ...(data.descriptionStyles !== undefined && { descriptionStyles: data.descriptionStyles }),
       ...(data.storagePath !== undefined && { storagePath: data.storagePath }),
       ...(data.fields !== undefined && { fields: data.fields }),
       ...(data.isQualityDocument !== undefined && { isQualityDocument: data.isQualityDocument }),
