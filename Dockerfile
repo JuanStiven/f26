@@ -2,7 +2,7 @@
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 COPY web-admin/package*.json ./
-RUN npm install
+RUN npm install --include=dev
 COPY web-admin/ .
 ENV VITE_API_URL=/api
 RUN npm run build
@@ -11,7 +11,7 @@ RUN npm run build
 FROM node:22-alpine AS backend-builder
 WORKDIR /app
 COPY backend/package*.json ./
-RUN npm install
+RUN npm install --include=dev
 COPY backend/prisma ./prisma
 RUN npx prisma generate
 COPY backend/ .
