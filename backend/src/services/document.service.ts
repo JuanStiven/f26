@@ -288,7 +288,7 @@ export async function createDocument(data: {
         // Wrap bare text lines in <p>
         .replace(/^([^<]+)$/gm, '<p>$1</p>');
 
-      const blockPattern = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
+      const blockPattern = /<(h[1-3]|p|li|blockquote|hr|table)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
       
       // Handle list wrappers - extract <li> from <ul>/<ol>
       let processedHtml = tempHtml
@@ -375,6 +375,97 @@ export async function createDocument(data: {
             });
             return; // Block fully handled
           }
+        }
+
+        if (block.tag === 'table') {
+          // Extract rows and cell content
+          const rows: { isHeader: boolean; cells: string[] }[] = [];
+          const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+          let rowMatch;
+          while ((rowMatch = rowPattern.exec(block.content)) !== null) {
+            const rowContent = rowMatch[1];
+            const cells: string[] = [];
+            let isHeader = false;
+            const cellPattern = /<(td|th)[^>]*>([\s\S]*?)<\/\1>/gi;
+            let cellMatch;
+            while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+              if (cellMatch[1].toLowerCase() === 'th') {
+                isHeader = true;
+              }
+              const cleanCell = stripHtml(cellMatch[2])
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#039;/g, "'")
+                .replace(/&nbsp;/g, ' ')
+                .trim();
+              cells.push(cleanCell);
+            }
+            if (cells.length > 0) {
+              rows.push({ isHeader, cells });
+            }
+          }
+
+          if (rows.length > 0) {
+            const startX = 50;
+            const tableWidth = doc.page.width - 100;
+            const maxCols = Math.max(...rows.map(r => r.cells.length));
+            const colWidth = tableWidth / maxCols;
+
+            doc.moveDown(0.5);
+
+            rows.forEach(row => {
+              let maxCellHeight = 15; // padding included
+              const rowY = doc.y;
+
+              // Calculate height needed for this row
+              row.cells.forEach((cellText, idx) => {
+                doc.font(row.isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(9);
+                const currentHeight = doc.heightOfString(cellText, { width: colWidth - 10 });
+                if (currentHeight + 8 > maxCellHeight) {
+                  maxCellHeight = currentHeight + 8;
+                }
+              });
+
+              checkPageBreak(maxCellHeight);
+              const currentDrawY = doc.y;
+
+              // Draw backgrounds and borders
+              row.cells.forEach((cellText, idx) => {
+                const cellX = startX + (idx * colWidth);
+                
+                // Draw background for header row
+                if (row.isHeader) {
+                  doc.save();
+                  doc.fillColor('#F3F4F6').rect(cellX, currentDrawY, colWidth, maxCellHeight).fill();
+                  doc.restore();
+                }
+
+                // Draw cell text
+                doc.font(row.isHeader ? 'Helvetica-Bold' : 'Helvetica')
+                   .fontSize(9)
+                   .fillColor('#374151');
+                
+                doc.text(cellText, cellX + 5, currentDrawY + 4, {
+                  width: colWidth - 10,
+                  align: 'left'
+                });
+
+                // Draw border around cell
+                doc.rect(cellX, currentDrawY, colWidth, maxCellHeight)
+                   .lineWidth(0.5)
+                   .strokeColor('#D1D5DB')
+                   .stroke();
+              });
+
+              doc.y = currentDrawY + maxCellHeight;
+            });
+
+            doc.x = 50;
+            doc.moveDown(0.5);
+          }
+          return;
         }
         
         if (block.tag === 'hr') {

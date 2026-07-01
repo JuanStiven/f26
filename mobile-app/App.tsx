@@ -482,7 +482,7 @@ export default function App() {
       .replace(/<\/?ol[^>]*>/gi, '')
       .replace(/<br\s*\/?>/gi, '\n');
 
-    const blockPattern = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
+    const blockPattern = /<(h[1-3]|p|li|blockquote|hr|table)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
     let blockIndex = 0;
     let match;
     let foundBlocks = false;
@@ -504,6 +504,60 @@ export default function App() {
 
       if (tag === 'hr') {
         blocks.push(<View key={key} style={{ borderBottomWidth: 1, borderColor: '#E5E7EB', marginVertical: 12 }} />);
+      } else if (tag === 'table') {
+        const rows: React.ReactNode[] = [];
+        const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let rowMatch;
+        let rowIdx = 0;
+        while ((rowMatch = rowPattern.exec(content)) !== null) {
+          const rowContent = rowMatch[1];
+          const cells: React.ReactNode[] = [];
+          const cellPattern = /<(td|th)[^>]*>([\s\S]*?)<\/\1>/gi;
+          let cellMatch;
+          let cellIdx = 0;
+          while ((cellMatch = cellPattern.exec(rowContent)) !== null) {
+            const isHeader = cellMatch[1].toLowerCase() === 'th';
+            const cellContent = cellMatch[2];
+            cells.push(
+              <View
+                key={`cell-${rowIdx}-${cellIdx}`}
+                style={{
+                  flex: 1,
+                  padding: 6,
+                  borderWidth: 1,
+                  borderColor: '#E5E7EB',
+                  backgroundColor: isHeader ? '#F3F4F6' : undefined,
+                  justifyContent: 'center',
+                  minWidth: 80,
+                }}
+              >
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: isHeader ? 'bold' : 'normal',
+                  color: '#374151',
+                }}>
+                  {renderInlineHtml(cellContent, `cell-text-${rowIdx}-${cellIdx}`)}
+                </Text>
+              </View>
+            );
+            cellIdx++;
+          }
+          rows.push(
+            <View key={`row-${rowIdx}`} style={{ flexDirection: 'row' }}>
+              {cells}
+            </View>
+          );
+          rowIdx++;
+        }
+        blocks.push(
+          <View key={key} style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 4, marginVertical: 12, overflow: 'hidden' }}>
+            <ScrollView horizontal nestedScrollEnabled>
+              <View style={{ minWidth: 300 }}>
+                {rows}
+              </View>
+            </ScrollView>
+          </View>
+        );
       } else if (tag === 'h1') {
         blocks.push(
           <Text key={key} style={{ fontSize: 24, fontWeight: 'bold', color: '#111827', marginTop: 14, marginBottom: 6, textAlign: align }}>

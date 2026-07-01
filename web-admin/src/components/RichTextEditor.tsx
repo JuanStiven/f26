@@ -7,6 +7,10 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { TableCell } from '@tiptap/extension-table-cell';
 import {
   Bold,
   Italic,
@@ -29,6 +33,7 @@ import {
   Minus,
   TextSelect,
   ChevronDown,
+  Table as TableIcon,
 } from 'lucide-react';
 
 interface ToolbarButtonProps {
@@ -86,6 +91,12 @@ export function RichTextEditor({ value, onChange, placeholder, className, fieldL
       Link.configure({ openOnClick: false, autolink: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Placeholder.configure({ placeholder: placeholder || 'Escribe el contenido del documento...' }),
+      Table.configure({
+        resizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: value || '',
     editorProps: {
@@ -109,12 +120,17 @@ export function RichTextEditor({ value, onChange, placeholder, className, fieldL
 
   const [variablePopoverOpen, setVariablePopoverOpen] = React.useState(false);
   const popoverRef = React.useRef<HTMLDivElement>(null);
+  const [tablePopoverOpen, setTablePopoverOpen] = React.useState(false);
+  const tablePopoverRef = React.useRef<HTMLDivElement>(null);
 
-  // Close popover on outside click
+  // Close popovers on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
         setVariablePopoverOpen(false);
+      }
+      if (tablePopoverRef.current && !tablePopoverRef.current.contains(event.target as Node)) {
+        setTablePopoverOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -263,6 +279,162 @@ export function RichTextEditor({ value, onChange, placeholder, className, fieldL
         <ToolbarButton label="Insertar enlace" onClick={setLink} active={editor.isActive('link')}>
           <Link2 className="h-4 w-4" />
         </ToolbarButton>
+
+        {/* Table Dropdown */}
+        <div className="relative" ref={tablePopoverRef}>
+          <button
+            type="button"
+            onClick={() => setTablePopoverOpen(!tablePopoverOpen)}
+            className={`h-8 gap-1.5 px-2 flex items-center rounded transition-colors text-xs font-medium ${
+              editor.isActive('table')
+                ? 'bg-primary/15 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <TableIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Tabla</span>
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          {tablePopoverOpen && (
+            <div className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-lg shadow-xl z-50 overflow-hidden text-xs">
+              <div className="border-b border-border px-3 py-2 bg-muted/20">
+                <p className="font-semibold text-foreground">Opciones de Tabla</p>
+              </div>
+              <div className="p-1 space-y-1">
+                {!editor.isActive('table') ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-muted text-foreground flex items-center gap-2"
+                    >
+                      <TableIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>Insertar Tabla (3x3)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-muted text-foreground flex items-center gap-2"
+                    >
+                      <TableIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span>Insertar Tabla (2x2)</span>
+                    </button>
+                  </>
+                ) : (
+                  <div className="space-y-1">
+                    {/* Rows */}
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Filas</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().addRowBefore().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Insertar fila arriba
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().addRowAfter().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Insertar fila abajo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().deleteRow().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-destructive"
+                    >
+                      Eliminar fila
+                    </button>
+
+                    {/* Columns */}
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t border-border/50 mt-1 pt-1">Columnas</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().addColumnBefore().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Insertar columna izquierda
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().addColumnAfter().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Insertar columna derecha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().deleteColumn().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-destructive"
+                    >
+                      Eliminar columna
+                    </button>
+
+                    {/* Cells */}
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-t border-border/50 mt-1 pt-1">Celdas</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().mergeCells().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Combinar celdas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().splitCell().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1 text-left transition-colors hover:bg-muted text-foreground"
+                    >
+                      Dividir celda
+                    </button>
+
+                    {/* Table Delete */}
+                    <div className="border-t border-border/50 mt-1 pt-1" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        editor.chain().focus().deleteTable().run();
+                        setTablePopoverOpen(false);
+                      }}
+                      className="w-full rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-red-50 dark:hover:bg-red-950/20 text-red-600 dark:text-red-400 font-semibold"
+                    >
+                      Eliminar Tabla Completa
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Variable inserter */}
         {fieldLabels.length > 0 && (
