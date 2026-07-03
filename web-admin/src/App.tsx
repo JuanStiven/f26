@@ -333,6 +333,17 @@ export default function App() {
     qualityDate: ''
   });
 
+  const [storagePathSearch, setStoragePathSearch] = useState('');
+  const [isStoragePathOpen, setIsStoragePathOpen] = useState(false);
+
+  useEffect(() => {
+    if (newTemplate.storagePath !== undefined) {
+      setStoragePathSearch(newTemplate.storagePath === '' ? 'Raíz (Directorio Principal)' : newTemplate.storagePath);
+    } else {
+      setStoragePathSearch('');
+    }
+  }, [newTemplate.storagePath]);
+
   const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown'>('text');
   const [fieldLabel, setFieldLabel] = useState('');
   const [fieldCategory, setFieldCategory] = useState('General');
@@ -488,7 +499,8 @@ export default function App() {
     pin: '',
     position: '',
     status: 'Activo',
-    role: 'EMPLOYEE' as 'EMPLOYEE' | 'ADMIN'
+    role: 'EMPLOYEE' as 'EMPLOYEE' | 'ADMIN',
+    email: ''
   });
 
   // Profile & Security Modals
@@ -637,7 +649,7 @@ export default function App() {
         const response = await api.put(`/employees/${newEmployee.id}`, newEmployee);
         if (response.data.success) {
           setEmployees(prev => prev.map(emp => emp.id === newEmployee.id ? response.data.data : emp));
-          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE', email: '' });
           setIsEmployeeModalOpen(false);
         }
       } else {
@@ -646,7 +658,7 @@ export default function App() {
         const response = await api.post('/employees', newEmployee);
         if (response.data.success) {
           setEmployees(prev => [...prev, response.data.data]);
-          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
+          setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE', email: '' });
           setIsEmployeeModalOpen(false);
         }
       }
@@ -951,16 +963,65 @@ export default function App() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground">Ruta de Almacenamiento (Servidor)</label>
-                  <select 
-                    value={newTemplate.storagePath || ''}
-                    onChange={(e) => setNewTemplate(prev => ({ ...prev, storagePath: e.target.value }))}
-                    className="w-full text-xs p-2.5 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
-                  >
-                    <option value="">Raíz (Directorio Principal)</option>
-                    {folders.map(folder => (
-                      <option key={folder.id} value={folder.path}>{folder.path}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input 
+                      type="text" 
+                      placeholder="Buscar o escribir ruta..."
+                      value={storagePathSearch}
+                      onFocus={() => {
+                        setIsStoragePathOpen(true);
+                        setStoragePathSearch('');
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          setIsStoragePathOpen(false);
+                          setStoragePathSearch(newTemplate.storagePath === '' ? 'Raíz (Directorio Principal)' : newTemplate.storagePath || '');
+                        }, 150);
+                      }}
+                      onChange={(e) => {
+                        setStoragePathSearch(e.target.value);
+                        setNewTemplate(prev => ({ ...prev, storagePath: e.target.value }));
+                      }}
+                      className="w-full text-xs p-2.5 pr-8 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none"
+                    />
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    
+                    {isStoragePathOpen && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-lg border border-border bg-card shadow-lg z-50 py-1">
+                        <div 
+                          onMouseDown={() => {
+                            setNewTemplate(prev => ({ ...prev, storagePath: '' }));
+                            setStoragePathSearch('Raíz (Directorio Principal)');
+                            setIsStoragePathOpen(false);
+                          }}
+                          className={`px-3 py-2 text-xs cursor-pointer transition-colors hover:bg-muted ${
+                            newTemplate.storagePath === '' ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                          }`}
+                        >
+                          Raíz (Directorio Principal)
+                        </div>
+                        {folders
+                          .filter(folder => folder.path && folder.path.toLowerCase().includes(storagePathSearch.toLowerCase()))
+                          .map(folder => (
+                            <div 
+                              key={folder.id}
+                              onMouseDown={() => {
+                                setNewTemplate(prev => ({ ...prev, storagePath: folder.path }));
+                                setStoragePathSearch(folder.path);
+                                setIsStoragePathOpen(false);
+                              }}
+                              className={`px-3 py-2 text-xs cursor-pointer transition-colors hover:bg-muted ${
+                                newTemplate.storagePath === folder.path ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
+                              }`}
+                            >
+                              📁 {folder.path}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1552,7 +1613,7 @@ export default function App() {
               </div>
               <button 
                 onClick={() => {
-                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE' });
+                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: '', status: 'Activo', role: 'EMPLOYEE', email: '' });
                   setIsEmployeeModalOpen(true);
                 }}
                 className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5 w-full sm:w-auto justify-center"
@@ -1563,11 +1624,11 @@ export default function App() {
             </div>
           </div>
 
-          {isEmployeeModalOpen && (
+          {isEmployeeModalOpen && newEmployee.role === 'EMPLOYEE' && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
               <div className="bg-card w-full max-w-md rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
-                  <h3 className="font-semibold text-foreground">Crear Nuevo Empleado</h3>
+                  <h3 className="font-semibold text-foreground">{newEmployee.id ? 'Editar' : 'Crear Nuevo'} Empleado</h3>
                   <button onClick={() => setIsEmployeeModalOpen(false)} className="text-muted-foreground hover:text-foreground">
                     <X className="h-5 w-5" />
                   </button>
@@ -1686,7 +1747,8 @@ export default function App() {
                               pin: '',
                               position: emp.position || '',
                               status: emp.status || 'Activo',
-                              role: emp.role || 'EMPLOYEE'
+                              role: emp.role || 'EMPLOYEE',
+                              email: emp.email || ''
                             });
                             setIsEmployeeModalOpen(true);
                           }}
@@ -1951,7 +2013,7 @@ export default function App() {
               </div>
               <button 
                 onClick={() => {
-                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: 'Administrador', status: 'Activo', role: 'ADMIN' });
+                  setNewEmployee({ id: undefined, name: '', document: '', pin: '', position: 'Administrador', status: 'Activo', role: 'ADMIN', email: '' });
                   setIsEmployeeModalOpen(true);
                 }}
                 className="bg-primary text-white text-xs px-4 py-2 rounded-lg hover:bg-primary/95 transition-colors flex items-center gap-1.5 w-full sm:w-auto justify-center"
@@ -1991,6 +2053,16 @@ export default function App() {
                         required
                         value={newEmployee.document}
                         onChange={(e) => setNewEmployee({...newEmployee, document: e.target.value})}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Correo Electrónico</label>
+                      <input 
+                        type="email" 
+                        required
+                        value={newEmployee.email}
+                        onChange={(e) => setNewEmployee({...newEmployee, email: e.target.value})}
                         className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                       />
                     </div>
@@ -2086,7 +2158,8 @@ export default function App() {
                               pin: '',
                               position: emp.position || '',
                               status: emp.status || 'Activo',
-                              role: emp.role || 'ADMIN'
+                              role: emp.role || 'ADMIN',
+                              email: emp.email || ''
                             });
                             setIsEmployeeModalOpen(true);
                           }}
