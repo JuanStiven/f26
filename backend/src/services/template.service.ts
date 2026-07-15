@@ -53,6 +53,7 @@ export async function createTemplate(data: {
   name: string;
   description?: string;
   descriptionStyles?: string;
+  footer?: string;
   storagePath?: string;
   fields: any[];
   assignedUsers?: string[];
@@ -68,6 +69,7 @@ export async function createTemplate(data: {
       name: data.name,
       description: data.description || '',
       descriptionStyles: data.descriptionStyles || '',
+      footer: data.footer || '',
       storagePath: data.storagePath || '',
       fields: data.fields,
       isQualityDocument: data.isQualityDocument || false,
@@ -89,7 +91,7 @@ export async function createTemplate(data: {
 
 export async function updateTemplate(
   id: string,
-  data: { name?: string; description?: string; descriptionStyles?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; }
+  data: { name?: string; description?: string; descriptionStyles?: string; footer?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; }
 ) {
   const exists = await prisma.template.findUnique({ where: { id } });
   if (!exists) {
@@ -102,6 +104,7 @@ export async function updateTemplate(
       ...(data.name !== undefined && { name: data.name }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.descriptionStyles !== undefined && { descriptionStyles: data.descriptionStyles }),
+      ...(data.footer !== undefined && { footer: data.footer }),
       ...(data.storagePath !== undefined && { storagePath: data.storagePath }),
       ...(data.fields !== undefined && { fields: data.fields }),
       ...(data.isQualityDocument !== undefined && { isQualityDocument: data.isQualityDocument }),
@@ -130,4 +133,153 @@ export async function deleteTemplate(id: string) {
   }
 
   return prisma.template.delete({ where: { id } });
+}
+
+export async function getTemplateVersions(templateId: string) {
+  const template = await prisma.template.findUnique({ where: { id: templateId } });
+  if (!template) {
+    throw { status: 404, message: 'Plantilla no encontrada.' };
+  }
+
+  const documents = await prisma.signedDocument.findMany({
+    where: { templateId },
+    select: {
+      templateSnapshot: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const versionsMap = new Map<string, { version: string; fieldsCount: number; documentCount: number; lastUsed: Date }>();
+
+  for (const doc of documents) {
+    const snapshot = doc.templateSnapshot as any;
+    const version = snapshot?.qualityVersion || 'Sin versión';
+    const fields = snapshot?.fields || [];
+    
+    if (!versionsMap.has(version)) {
+      versionsMap.set(version, {
+        version,
+        fieldsCount: fields.length,
+        documentCount: 1,
+        lastUsed: doc.createdAt
+      });
+    } else {
+      const entry = versionsMap.get(version)!;
+      entry.documentCount++;
+      if (doc.createdAt > entry.lastUsed) {
+        entry.lastUsed = doc.createdAt;
+      }
+    }
+  }
+
+  // Also include the current template's version if not already present
+  const currentVersion = template.qualityVersion || 'Sin versión';
+  if (!versionsMap.has(currentVersion)) {
+    versionsMap.set(currentVersion, {
+      version: currentVersion,
+      fieldsCount: (template.fields as any[] || []).length,
+      documentCount: 0,
+      lastUsed: template.updatedAt
+    });
+  }
+
+  return Array.from(versionsMap.values());
+}
+
+export async function exportTemplateRecords(templateId: string, version: string) {
+  const template = await prisma.template.findUnique({ where: { id: templateId } });
+  if (!template) {
+    throw { status: 404, message: 'Plantilla no encontrada.' };
+  }
+
+  // Get all documents filled for this template
+  const documents = await prisma.signedDocument.findMany({
+    where: { templateId },
+    include: {
+      filledBy: {
+        select: {
+          name: true,
+          document: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  // Filter documents by templateSnapshot version
+  // If version is "Sin versión", we match empty or missing versions
+  const targetVersion = version === 'Sin versión' ? '' : version;
+  const filteredDocs = documents.filter(doc => {
+    const snapshot = doc.templateSnapshot as any;
+    const docVer = snapshot?.qualityVersion || '';
+    if (!targetVersion) {
+      return !docVer;
+    }
+    return docVer.toLowerCase() === targetVersion.toLowerCase();
+  });
+
+  // Get the fields schema for this version.
+  let fields: any[] = [];
+  if (filteredDocs.length > 0) {
+    const firstSnapshot = filteredDocs[0].templateSnapshot as any;
+    fields = firstSnapshot?.fields || [];
+  } else {
+    // If version matches current version of template, use template's fields
+    const currentVersion = template.qualityVersion || '';
+    if (currentVersion.toLowerCase() === targetVersion.toLowerCase()) {
+      fields = template.fields as any[] || [];
+    }
+  }
+
+  // Helper to escape cells according to RFC 4180
+  const escapeCsvCell = (val: any): string => {
+    if (val === undefined || val === null) return '""';
+    let str = '';
+    if (typeof val === 'object') {
+      if (Array.isArray(val)) {
+        str = val.map((row: any, idx: number) => {
+          const rowStr = Object.entries(row)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ');
+          return `[Fila ${idx + 1}: ${rowStr}]`;
+        }).join('\n');
+      } else {
+        str = JSON.stringify(val);
+      }
+    } else {
+      str = String(val);
+    }
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  // Build CSV
+  const headers = [
+    '"ID Documento"',
+    '"Fecha Diligenciamiento"',
+    '"Diligenciado Por (Nombre)"',
+    '"Diligenciado Por (Cédula)"',
+    '"Estado Sincronización"',
+    ...fields.map(f => escapeCsvCell(f.label))
+  ];
+
+  const rows = [headers.join(',')];
+
+  for (const doc of filteredDocs) {
+    const formData = (doc.data || {}) as Record<string, any>;
+    const rowCells = [
+      escapeCsvCell(doc.id),
+      escapeCsvCell(doc.createdAt.toISOString()),
+      escapeCsvCell(doc.filledBy?.name || 'Sistema'),
+      escapeCsvCell(doc.filledBy?.document || 'N/A'),
+      escapeCsvCell(doc.syncStatus),
+      ...fields.map(f => {
+        const val = formData[f.id];
+        return escapeCsvCell(val);
+      })
+    ];
+    rows.push(rowCells.join(','));
+  }
+
+  return rows.join('\r\n');
 }

@@ -318,8 +318,18 @@
 .tiptap .column-resize-handle.resizing {
   opacity: 1;
 }
-
 .tiptap .tableWrapper {
   overflow-x: auto;
 }
 
+/* Make list bullets and numbers bold automatically when the list item's text starts with bold */
+.tiptap li:has(strong:first-child)::marker,
+.tiptap li:has(b:first-child)::marker,
+.tiptap li:has(p:first-child strong:first-child)::marker,
+.tiptap li:has(p:first-child b:first-child)::marker,
+.template-preview-content li:has(strong:first-child)::marker,
+.template-preview-content li:has(b:first-child)::marker,
+.template-preview-content li:has(p:first-child strong:first-child)::marker,
+.template-preview-content li:has(p:first-child b:first-child)::marker {
+  font-weight: bold;
+}

@@ -18,6 +18,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
 import { Picker } from '@react-native-picker/picker';
+import { WebView } from 'react-native-webview';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +30,32 @@ const EMPLOYEES_DB = [
   { id: '2', name: 'Laura Camila Ortiz', doc: '1087654321', pin: '5678', role: 'Enfermera Jefa', status: 'Activo' },
   { id: '3', name: 'Andrés Felipe Restrepo', doc: '1076543210', pin: '0000', role: 'Técnico Domiciliario', status: 'Inactivo' }
 ];
+
+const formatDate = (date: Date) => {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const parseDateString = (str: string) => {
+  if (!str) return new Date();
+  if (str.includes('/')) {
+    const parts = str.split(' ');
+    const dateParts = parts[0].split('/');
+    const d = parseInt(dateParts[0], 10);
+    const m = parseInt(dateParts[1], 10) - 1;
+    const y = parseInt(dateParts[2], 10);
+    const date = new Date(y, m, d);
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      date.setHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
+    }
+    return date;
+  }
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -48,10 +75,17 @@ export default function App() {
   // Formulario Dinámico (Simulado para llenar en la tablet)
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
-  const [showDatePicker, setShowDatePicker] = useState<{ visible: boolean, fieldId: string | null }>({ visible: false, fieldId: null });
+  const [showDatePicker, setShowDatePicker] = useState<{ visible: boolean, fieldId: string | null, mode?: 'date' | 'time' | 'datetime' }>({ visible: false, fieldId: null, mode: 'date' });
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
   const [activeSignatureFieldId, setActiveSignatureFieldId] = useState<string | null>(null);
   const signatureRef = useRef<any>(null);
+
+  // States for Rich Text Area editor modal
+  const [richTextModalVisible, setRichTextModalVisible] = useState(false);
+  const [activeRichTextFieldId, setActiveRichTextFieldId] = useState<string | null>(null);
+  const [activeRichTextLabel, setActiveRichTextLabel] = useState('');
+  const [tempRichTextHtml, setTempRichTextHtml] = useState('');
+  const [initialRichTextHtml, setInitialRichTextHtml] = useState('');
 
   const [templates, setTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -329,8 +363,183 @@ export default function App() {
     setErrorMessage('');
   };
 
+  const getRichEditorHtml = (initialValue: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #F8FAFC;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      background-color: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px 12px 0 0;
+      border-bottom: none;
+    }
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .btn {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #475569;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 38px;
+      height: 36px;
+      transition: all 0.2s;
+    }
+    .btn:active, .btn.active {
+      background: #004F9F;
+      color: #FFFFFF;
+      border-color: #004F9F;
+    }
+    #editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    #editor {
+      flex: 1;
+      border: 1px solid #E2E8F0;
+      border-radius: 0 0 12px 12px;
+      background-color: #FFFFFF;
+      padding: 16px;
+      font-size: 16px;
+      line-height: 1.6;
+      outline: none;
+      overflow-y: auto;
+      -webkit-user-select: text;
+      color: #000000;
+    }
+    #editor:focus {
+      border-color: #004F9F;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <div class="toolbar-row">
+      <button class="btn" id="btn-bold" onclick="format('bold', 'btn-bold')"><b>B</b></button>
+      <button class="btn" id="btn-italic" onclick="format('italic', 'btn-italic')"><i>I</i></button>
+      <button class="btn" id="btn-underline" onclick="format('underline', 'btn-underline')"><u>U</u></button>
+      <button class="btn" id="btn-strike" onclick="format('strikeThrough', 'btn-strike')"><s>S</s></button>
+      <button class="btn" id="btn-ul" onclick="format('insertUnorderedList', 'btn-ul')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><circle cx="4" cy="6" r="1.5" fill="currentColor"></circle><circle cx="4" cy="12" r="1.5" fill="currentColor"></circle><circle cx="4" cy="18" r="1.5" fill="currentColor"></circle></svg>
+      </button>
+      <button class="btn" id="btn-ol" onclick="format('insertOrderedList', 'btn-ol')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg>
+      </button>
+    </div>
+    <div class="toolbar-row" style="margin-top: 4px;">
+      <button class="btn" id="btn-left" onclick="format('justifyLeft', 'btn-left')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="17" y1="10" x2="3" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="15" y1="18" x2="3" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-center" onclick="format('justifyCenter', 'btn-center')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="18" y1="10" x2="6" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-right" onclick="format('justifyRight', 'btn-right')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="10" x2="7" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="9" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-justify" onclick="format('justifyFull', 'btn-justify')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-clear" onclick="format('removeFormat', 'btn-clear')" style="margin-left: auto;">🧹 Limpiar</button>
+    </div>
+  </div>
+  <div id="editor-container">
+    <div id="editor" contenteditable="true"></div>
+  </div>
+
+  <script>
+    const editor = document.getElementById('editor');
+    
+    // Inject initial content
+    editor.innerHTML = ${JSON.stringify(initialValue || '')};
+
+    function format(command, btnId) {
+      document.execCommand(command, false, null);
+      editor.focus();
+      updateButtonStates();
+      sendContent();
+    }
+
+    function updateButtonStates() {
+      const formats = {
+        'bold': 'btn-bold',
+        'italic': 'btn-italic',
+        'underline': 'btn-underline',
+        'strikeThrough': 'btn-strike',
+        'insertUnorderedList': 'btn-ul',
+        'insertOrderedList': 'btn-ol',
+        'justifyLeft': 'btn-left',
+        'justifyCenter': 'btn-center',
+        'justifyRight': 'btn-right',
+        'justifyFull': 'btn-justify'
+      };
+
+      for (const [cmd, id] of Object.entries(formats)) {
+        const el = document.getElementById(id);
+        if (el) {
+          try {
+            const state = document.queryCommandState(cmd);
+            el.classList.toggle('active', !!state);
+          } catch(e) {}
+        }
+      }
+    }
+
+    function sendContent() {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(editor.innerHTML);
+      }
+    }
+
+    editor.addEventListener('input', sendContent);
+    editor.addEventListener('blur', sendContent);
+    editor.addEventListener('keyup', updateButtonStates);
+    editor.addEventListener('mouseup', updateButtonStates);
+  </script>
+</body>
+</html>
+  `;
+
   const renderRichDescription = (description: string, data: any, fields: any[] = []) => {
     if (!description) return <Text style={{ fontSize: 14, color: '#4B5563', marginBottom: 16 }}>Sin descripción</Text>;
+
+    const getFieldTagName = (field: any, allFields: any[]) => {
+      const hasDuplicate = allFields.some(
+        (f: any) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase()
+      );
+      if (hasDuplicate) {
+        return `${field.category || 'General'}: ${field.label}`;
+      }
+      return field.label;
+    };
 
     const mappedData: Record<string, any> = {};
     Object.keys(data || {}).forEach(key => {
@@ -342,6 +551,7 @@ export default function App() {
           if (option) val = option.label || option.value;
         }
         mappedData[fieldDef.label] = val;
+        mappedData[getFieldTagName(fieldDef, fields)] = val;
       }
     });
 
@@ -638,6 +848,54 @@ export default function App() {
 
   const handleSaveDocument = async () => {
     if (!selectedTemplate) return;
+
+    // Validar campos obligatorios
+    const missingFields: string[] = [];
+    if (selectedTemplate.fields && Array.isArray(selectedTemplate.fields)) {
+      selectedTemplate.fields.forEach((field: any) => {
+        if (field.required) {
+          const value = formData[field.id];
+          let isEmpty = false;
+          
+          if (value === undefined || value === null) {
+            isEmpty = true;
+          } else if (field.type === 'table') {
+            if (!Array.isArray(value) || value.length === 0) {
+              isEmpty = true;
+            } else {
+              const allRowsEmpty = value.every((row: any) => 
+                Object.values(row).every((cellVal: any) => String(cellVal || '').trim() === '')
+              );
+              if (allRowsEmpty) {
+                isEmpty = true;
+              }
+            }
+          } else if (field.type === 'textarea') {
+            const strippedText = String(value || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim();
+            if (strippedText === '') {
+              isEmpty = true;
+            }
+          } else {
+            if (String(value).trim() === '') {
+              isEmpty = true;
+            }
+          }
+          
+          if (isEmpty) {
+            missingFields.push(field.label);
+          }
+        }
+      });
+    }
+
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Campos Obligatorios',
+        `Por favor, complete los siguientes campos obligatorios antes de guardar el documento:\n\n${missingFields.map(f => `• ${f}`).join('\n')}`
+      );
+      return;
+    }
+
     try {
       const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
       const response = await fetch(`${API_URL}/documents`, {
@@ -902,9 +1160,9 @@ export default function App() {
 
         {/* Content Screens */}
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 200 : 120}
         >
         <ScrollView style={styles.mainContent} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {currentScreen === 'dashboard' && (
@@ -1102,26 +1360,100 @@ export default function App() {
 
                         {field.type === 'date' && (
                           <View>
-                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
+                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id, mode: 'date' })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
                               <Text style={{ color: formData[field.id] ? colors.text : '#A1A1AA' }}>
                                 {formData[field.id] || 'DD/MM/AAAA'}
                               </Text>
                             </TouchableOpacity>
-                            {showDatePicker.visible && showDatePicker.fieldId === field.id && (
-                              <DateTimePicker
-                                value={formData[field.id] ? new Date(formData[field.id]) : new Date()}
-                                mode="date"
-                                display="default"
-                                onChange={(event, selectedDate) => {
-                                  setShowDatePicker({ visible: false, fieldId: null });
-                                  if (selectedDate && event.type !== 'dismissed') {
-                                    const dateStr = selectedDate.toISOString().split('T')[0];
-                                    setFormData((prev: any) => ({...prev, [field.id]: dateStr}));
-                                  }
-                                }}
-                              />
-                            )}
                           </View>
+                        )}
+
+                        {field.type === 'time' && (
+                          <View>
+                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id, mode: 'time' })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
+                              <Text style={{ color: formData[field.id] ? colors.text : '#A1A1AA' }}>
+                                {formData[field.id] || 'HH:MM'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {field.type === 'datetime' && (
+                          <View>
+                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id, mode: 'datetime' })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
+                              <Text style={{ color: formData[field.id] ? colors.text : '#A1A1AA' }}>
+                                {formData[field.id] || 'DD/MM/AAAA HH:MM'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {field.type === 'textarea' && (
+                          <View>
+                            {formData[field.id] ? (
+                              <View style={{ borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 12, backgroundColor: 'white', minHeight: 60, marginBottom: 8 }}>
+                                <Text style={{ fontSize: 14, color: '#374151' }}>
+                                  {formData[field.id].replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim() || '(Texto vacío)'}
+                                </Text>
+                              </View>
+                            ) : null}
+                            <TouchableOpacity 
+                              style={styles.signatureBtn} 
+                              onPress={() => {
+                                const initialVal = formData[field.id] || '';
+                                setActiveRichTextFieldId(field.id);
+                                setActiveRichTextLabel(field.label);
+                                setTempRichTextHtml(initialVal);
+                                setInitialRichTextHtml(initialVal);
+                                setRichTextModalVisible(true);
+                              }}
+                            >
+                              <Text style={styles.signatureBtnText}>✍️ Editar Texto Enriquecido</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {showDatePicker.visible && showDatePicker.fieldId === field.id && (
+                          <DateTimePicker
+                            value={(() => {
+                              try {
+                                if (showDatePicker.mode === 'time') {
+                                  if (formData[field.id]) {
+                                    const [h, m] = formData[field.id].split(':');
+                                    const d = new Date();
+                                    d.setHours(parseInt(h, 10), parseInt(m, 10));
+                                    return d;
+                                  }
+                                  return new Date();
+                                } else {
+                                  return parseDateString(formData[field.id]);
+                                }
+                              } catch (e) {
+                                return new Date();
+                              }
+                            })()}
+                            mode={showDatePicker.mode || 'date'}
+                            is24Hour={true}
+                            display="default"
+                            onChange={(event, selectedDate) => {
+                              setShowDatePicker({ visible: false, fieldId: null, mode: 'date' });
+                              if (selectedDate && event.type !== 'dismissed') {
+                                if (showDatePicker.mode === 'time') {
+                                  const hours = String(selectedDate.getHours()).padStart(2, '0');
+                                  const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+                                  setFormData((prev: any) => ({...prev, [field.id]: `${hours}:${minutes}`}));
+                                } else if (showDatePicker.mode === 'datetime') {
+                                  const formattedDate = formatDate(selectedDate);
+                                  const hours = String(selectedDate.getHours()).padStart(2, '0');
+                                  const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+                                  setFormData((prev: any) => ({...prev, [field.id]: `${formattedDate} ${hours}:${minutes}`}));
+                                } else {
+                                  const formattedDate = formatDate(selectedDate);
+                                  setFormData((prev: any) => ({...prev, [field.id]: formattedDate}));
+                                }
+                              }
+                            }}
+                          />
                         )}
                         
                         {field.type === 'photo' && (
@@ -1240,6 +1572,12 @@ export default function App() {
                         </View>
                       );
                     })}
+
+                    {selectedTemplate.footer ? (
+                      <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', marginBottom: 12 }}>
+                        {renderRichDescription(selectedTemplate.footer, formData || {}, selectedTemplate.fields || [])}
+                      </View>
+                    ) : null}
 
                     <TouchableOpacity 
                       style={[styles.button, styles.buttonPrimary, { marginTop: 20 }]}
@@ -1543,12 +1881,61 @@ export default function App() {
                     </View>
                   );
                 })}
+
+                {selectedDocument.template?.footer ? (
+                  <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB', marginBottom: 12 }}>
+                    {renderRichDescription(selectedDocument.template.footer, selectedDocument.data || {}, selectedDocument.template.fields || [])}
+                  </View>
+                ) : null}
               </View>
             </View>
           )}
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      <Modal visible={richTextModalVisible} animationType="slide" transparent={true} onRequestClose={() => setRichTextModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: '95%', height: '85%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
+            <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => {
+                setRichTextModalVisible(false);
+                setActiveRichTextFieldId(null);
+                setTempRichTextHtml('');
+                setInitialRichTextHtml('');
+              }}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{activeRichTextLabel}</Text>
+              
+              <TouchableOpacity onPress={() => {
+                if (activeRichTextFieldId) {
+                  setFormData((prev: any) => ({ ...prev, [activeRichTextFieldId]: tempRichTextHtml }));
+                }
+                setRichTextModalVisible(false);
+                setActiveRichTextFieldId(null);
+                setTempRichTextHtml('');
+                setInitialRichTextHtml('');
+              }}>
+                <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Listo</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}>
+              <WebView
+                source={{ html: getRichEditorHtml(initialRichTextHtml) }}
+                onMessage={(event) => {
+                  setTempRichTextHtml(event.nativeEvent.data);
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                originWhitelist={['*']}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={signatureModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSignatureModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>

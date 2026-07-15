@@ -3,6 +3,7 @@ import { MainLayout } from './components/layout/main-layout';
 import { LoginPage } from './components/auth/login';
 import { FileExplorer } from './components/explorer/file-explorer';
 import { RichTextEditor } from './components/RichTextEditor';
+import type { RichTextEditorRef } from './components/RichTextEditor';
 import { TemplatePreview } from './components/TemplatePreview';
 import { 
   FileText, 
@@ -28,12 +29,14 @@ import {
   ChevronRight,
   RefreshCw,
   Pencil,
-  FileCode
+  FileCode,
+  Layout,
+  MoreVertical
 } from 'lucide-react';
 
 interface TemplateField {
   id: string;
-  type: 'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown';
+  type: 'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown' | 'textarea' | 'time' | 'datetime';
   label: string;
   placeholder?: string;
   required: boolean;
@@ -48,6 +51,7 @@ interface Template {
   name: string;
   description: string;
   descriptionStyles?: string;
+  footer?: string;
   fields: TemplateField[];
   createdAt: string;
   storagePath?: string;
@@ -57,6 +61,38 @@ interface Template {
   qualityVersion?: string;
   qualityDate?: string;
 }
+
+const getFieldTagName = (field: TemplateField, allFields: TemplateField[]) => {
+  const hasDuplicate = allFields.some(
+    f => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase()
+  );
+  if (hasDuplicate) {
+    return `${field.category || 'General'}: ${field.label}`;
+  }
+  return field.label;
+};
+
+const updateDescriptionTags = (
+  oldFields: TemplateField[],
+  newFields: TemplateField[],
+  description: string
+): string => {
+  let newDescription = description || '';
+  oldFields.forEach(oldField => {
+    const newField = newFields.find(f => f.id === oldField.id);
+    if (newField) {
+      const oldTag = getFieldTagName(oldField, oldFields);
+      const newTag = getFieldTagName(newField, newFields);
+      if (oldTag !== newTag) {
+        const escapedOldTag = oldTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`{{\\s*${escapedOldTag}\\s*}}`, 'gi');
+        newDescription = newDescription.replace(regex, `{{${newTag}}}`);
+      }
+    }
+  });
+  return newDescription;
+};
+
 export function MarkdownRenderer({ text, data = {} }: { text: string, data?: Record<string, any> }) {
   if (!text) return null;
 
@@ -241,6 +277,8 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+
+
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
@@ -344,7 +382,7 @@ export default function App() {
     }
   }, [newTemplate.storagePath]);
 
-  const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown'>('text');
+  const [selectedFieldType, setSelectedFieldType] = useState<'text' | 'number' | 'date' | 'photo' | 'signature' | 'table' | 'dropdown' | 'textarea' | 'time' | 'datetime'>('text');
   const [fieldLabel, setFieldLabel] = useState('');
   const [fieldCategory, setFieldCategory] = useState('General');
   const [fieldRequired, setFieldRequired] = useState(true);
@@ -355,7 +393,7 @@ export default function App() {
   const [draggedFieldId, setDraggedFieldId] = useState<string | null>(null);
   const [documentModal, setDocumentModal] = useState<any>(null);
   const [descriptionStyles, setDescriptionStyles] = useState('');
-  const [activeEditorTab, setActiveEditorTab] = useState<'editor' | 'styles' | 'preview'>('editor');
+  const [activeEditorTab, setActiveEditorTab] = useState<'editor' | 'styles' | 'footer' | 'preview'>('editor');
 
   // Pagination, Sorting and Filtering for Documents
   const [docSearchTerm, setDocSearchTerm] = useState('');
@@ -459,26 +497,24 @@ export default function App() {
   const adminTotalPages = Math.ceil(filteredAdmins.length / adminItemsPerPage);
   const adminCurrentData = filteredAdmins.slice((adminCurrentPage - 1) * adminItemsPerPage, adminCurrentPage * adminItemsPerPage);
 
-  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const richEditorRef = useRef<RichTextEditorRef>(null);
+  const richFooterRef = useRef<RichTextEditorRef>(null);
 
   const insertTagToDescription = (tag: string) => {
-    const textarea = descriptionRef.current;
-    const currentDesc = newTemplate.description || '';
-    
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const insert = ` {{${tag}}} `;
-      
-      const newDesc = currentDesc.substring(0, start) + insert + currentDesc.substring(end);
-      setNewTemplate(prev => ({ ...prev, description: newDesc }));
-      
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + insert.length, start + insert.length);
-      }, 0);
+    if (activeEditorTab === 'footer') {
+      if (richFooterRef.current) {
+        richFooterRef.current.insertVariable(tag);
+      } else {
+        const currentFooter = newTemplate.footer || '';
+        setNewTemplate(prev => ({ ...prev, footer: currentFooter + ` {{${tag}}} ` }));
+      }
     } else {
-      setNewTemplate(prev => ({ ...prev, description: currentDesc + ` {{${tag}}} ` }));
+      if (richEditorRef.current) {
+        richEditorRef.current.insertVariable(tag);
+      } else {
+        const currentDesc = newTemplate.description || '';
+        setNewTemplate(prev => ({ ...prev, description: currentDesc + ` {{${tag}}} ` }));
+      }
     }
   };
 
@@ -489,6 +525,31 @@ export default function App() {
   // Template Modal State
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<any>(null);
+  
+  // Export Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportTemplate, setExportTemplate] = useState<any>(null);
+  const [templateVersions, setTemplateVersions] = useState<any[]>([]);
+  const [selectedExportVersion, setSelectedExportVersion] = useState<string>('');
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  
+  // Template listing search, pagination and dropdown state
+  const [templateSearchQuery, setTemplateSearchQuery] = useState('');
+  const [templateCurrentPage, setTemplateCurrentPage] = useState(1);
+  const [activeActionsTemplateId, setActiveActionsTemplateId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTemplateCurrentPage(1);
+  }, [templateSearchQuery]);
+
+  useEffect(() => {
+    const handleWindowClick = () => {
+      setActiveActionsTemplateId(null);
+    };
+    window.addEventListener('click', handleWindowClick);
+    return () => window.removeEventListener('click', handleWindowClick);
+  }, []);
   
   // Template Preview Modal State
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -522,18 +583,25 @@ export default function App() {
       category: fieldCategory.trim() || 'General'
     };
 
+    const oldFields = newTemplate.fields || [];
+    let updatedFields: TemplateField[] = [];
+
     if (editingFieldId) {
-      setNewTemplate(prev => ({
-        ...prev,
-        fields: prev.fields?.map(f => f.id === editingFieldId ? { ...f, ...fieldData } : f)
-      }));
+      updatedFields = oldFields.map(f => f.id === editingFieldId ? { ...f, ...fieldData } : f);
       setEditingFieldId(null);
     } else {
-      setNewTemplate(prev => ({
-        ...prev,
-        fields: [...(prev.fields || []), { id: Math.random().toString(36).substr(2, 9), ...fieldData }]
-      }));
+      updatedFields = [...oldFields, { id: Math.random().toString(36).substr(2, 9), ...fieldData }];
     }
+
+    const newDescription = updateDescriptionTags(oldFields, updatedFields, newTemplate.description || '');
+    const newStyles = updateDescriptionTags(oldFields, updatedFields, newTemplate.descriptionStyles || '');
+
+    setNewTemplate(prev => ({
+      ...prev,
+      fields: updatedFields,
+      description: newDescription,
+      descriptionStyles: newStyles
+    }));
 
     setFieldLabel('');
     setTableCols('');
@@ -579,9 +647,17 @@ export default function App() {
   };
 
   const removeFieldFromTemplate = (id: string) => {
+    const oldFields = newTemplate.fields || [];
+    const updatedFields = oldFields.filter(f => f.id !== id);
+    
+    const newDescription = updateDescriptionTags(oldFields, updatedFields, newTemplate.description || '');
+    const newStyles = updateDescriptionTags(oldFields, updatedFields, newTemplate.descriptionStyles || '');
+
     setNewTemplate(prev => ({
       ...prev,
-      fields: (prev.fields || []).filter(f => f.id !== id)
+      fields: updatedFields,
+      description: newDescription,
+      descriptionStyles: newStyles
     }));
   };
 
@@ -593,6 +669,7 @@ export default function App() {
         name: newTemplate.name,
         description: newTemplate.description || '',
         descriptionStyles: descriptionStyles || '',
+        footer: newTemplate.footer || '',
         storagePath: newTemplate.storagePath || 'Raíz',
         fields: newTemplate.fields || [],
         assignedUsers: newTemplate.assignedUsers?.map((u: any) => u.id) || [],
@@ -606,7 +683,7 @@ export default function App() {
         const response = await api.put(`/templates/${newTemplate.id}`, payload);
         if (response.data.success) {
           setTemplates(prev => prev.map(t => t.id === newTemplate.id ? response.data.data : t));
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
+          setNewTemplate({ name: '', description: '', footer: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
           setDescriptionStyles('');
           alert('Plantilla actualizada con éxito.');
         }
@@ -614,7 +691,7 @@ export default function App() {
         const response = await api.post('/templates', payload);
         if (response.data.success) {
           setTemplates(prev => [...prev, response.data.data]);
-          setNewTemplate({ name: '', description: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
+          setNewTemplate({ name: '', description: '', footer: '', fields: [], storagePath: '', assignedUsers: [], isQualityDocument: false, qualityCode: '', qualityVersion: '', qualityDate: '' });
           setDescriptionStyles('');
           alert('Plantilla guardada con éxito.');
         }
@@ -636,6 +713,54 @@ export default function App() {
       }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error al eliminar plantilla');
+    }
+  };
+
+  const handleOpenExportModal = async (template: any) => {
+    setExportTemplate(template);
+    setIsExportModalOpen(true);
+    setIsLoadingVersions(true);
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.get(`/templates/${template.id}/versions`);
+      if (response.data.success) {
+        setTemplateVersions(response.data.data);
+        if (response.data.data.length > 0) {
+          setSelectedExportVersion(response.data.data[0].version);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading template versions:", err);
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  };
+
+  const handleExportRecords = async () => {
+    if (!exportTemplate || !selectedExportVersion) return;
+    setIsExporting(true);
+    try {
+      const { default: api } = await import('./utils/api');
+      const response = await api.get(`/templates/${exportTemplate.id}/export`, {
+        params: { version: selectedExportVersion },
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `registros_${exportTemplate.name.replace(/\s+/g, '_')}_${selectedExportVersion}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setIsExportModalOpen(false);
+    } catch (err) {
+      console.error("Error exporting template records:", err);
+      alert("Error al exportar los registros de la plantilla.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1091,7 +1216,19 @@ export default function App() {
                       }`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                      Editor
+                      Contenido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveEditorTab('footer')}
+                      className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${
+                        activeEditorTab === 'footer'
+                          ? 'bg-card text-primary border-b-2 border-primary'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <Layout className="h-3.5 w-3.5" />
+                      Pie de página
                     </button>
                     <button
                       type="button"
@@ -1122,10 +1259,21 @@ export default function App() {
                   <div className="bg-card">
                     {activeEditorTab === 'editor' && (
                       <RichTextEditor
+                        ref={richEditorRef}
                         value={newTemplate.description || ''}
                         onChange={(html) => setNewTemplate(prev => ({ ...prev, description: html }))}
                         placeholder="Escribe el contenido del documento..."
-                        fieldLabels={(newTemplate.fields || []).map(f => f.label)}
+                        fieldLabels={(newTemplate.fields || []).map(f => getFieldTagName(f, newTemplate.fields || []))}
+                      />
+                    )}
+
+                    {activeEditorTab === 'footer' && (
+                      <RichTextEditor
+                        ref={richFooterRef}
+                        value={newTemplate.footer || ''}
+                        onChange={(html) => setNewTemplate(prev => ({ ...prev, footer: html }))}
+                        placeholder="Escribe el contenido del pie de página (se repetirá en todas las hojas)..."
+                        fieldLabels={(newTemplate.fields || []).map(f => getFieldTagName(f, newTemplate.fields || []))}
                       />
                     )}
 
@@ -1149,6 +1297,7 @@ export default function App() {
                         <TemplatePreview
                           body={newTemplate.description || ''}
                           styles={descriptionStyles}
+                          footer={newTemplate.footer || ''}
                         />
                       </div>
                     )}
@@ -1200,6 +1349,9 @@ export default function App() {
                       <option value="text">Texto Corto</option>
                       <option value="number">Número</option>
                       <option value="date">Fecha</option>
+                      <option value="time">Hora (HH:MM)</option>
+                      <option value="datetime">Fecha y Hora</option>
+                      <option value="textarea">Text Area (Enriquecido)</option>
                       <option value="photo">Fotografía (Cámara)</option>
                       <option value="signature">Firma Táctil</option>
                       <option value="table">Tabla de Contenidos</option>
@@ -1321,7 +1473,7 @@ export default function App() {
                             </div>
                             <div className="flex items-center gap-1">
                               <button 
-                                onClick={() => insertTagToDescription(field.label)}
+                                onClick={() => insertTagToDescription(getFieldTagName(field, newTemplate.fields || []))}
                                 className="text-primary hover:bg-primary/10 p-1.5 rounded transition-colors flex items-center gap-1"
                                 title="Insertar en el texto"
                               >
@@ -1422,6 +1574,7 @@ export default function App() {
                   <TemplatePreview
                     body={newTemplate.description || '<p style="color:#9ca3af">Sin descripción</p>'}
                     styles={descriptionStyles}
+                    footer={newTemplate.footer}
                     className="!shadow-none [&>div]:!px-4 [&>div]:!py-4 [&>div]:!rounded-none"
                   />
                 </div>
@@ -1455,6 +1608,18 @@ export default function App() {
 
                           {field.type === 'date' && (
                             <input type="date" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
+
+                          {field.type === 'time' && (
+                            <input type="time" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
+
+                          {field.type === 'datetime' && (
+                            <input type="datetime-local" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                          )}
+
+                          {field.type === 'textarea' && (
+                            <textarea placeholder="Área de texto enriquecido (Negrita, alineación)..." disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed min-h-[60px]" />
                           )}
 
                           {field.type === 'photo' && (
@@ -1508,73 +1673,159 @@ export default function App() {
           </div>
 
           {/* Plantillas Actuales */}
-          <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-4">
-            <h3 className="font-semibold text-foreground">Plantillas Existentes</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {templates.map(t => (
-                <div key={t.id} className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors flex justify-between items-start bg-muted/10">
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-foreground">{t.name}</h4>
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">{t.description}</p>
-                    <div className="pt-2 flex flex-wrap gap-2 items-center">
-                      <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium">
-                        {t.fields.length} campos
-                      </span>
-                      {t.storagePath && (
-                        <span className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-full font-mono font-medium">
-                          📁 {t.storagePath}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-muted-foreground">Creado: {t.createdAt}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button 
-                      onClick={() => setPreviewTemplate(t)}
-                      className="p-1.5 rounded hover:bg-muted text-accent"
-                      title="Ver vista previa"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setNewTemplate({
-                          id: t.id,
-                          name: t.name,
-                          description: t.description,
-                          storagePath: t.storagePath,
-                          fields: t.fields || [],
-                          assignedUsers: t.assignedUsers || [],
-                          isQualityDocument: t.isQualityDocument || false,
-                          qualityCode: t.qualityCode || '',
-                          qualityVersion: t.qualityVersion || '',
-                          qualityDate: t.qualityDate || ''
-                        });
-                        setDescriptionStyles((t as any).descriptionStyles || '');
-                        setActiveEditorTab('editor');
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className="p-1.5 rounded hover:bg-muted text-primary"
-                      title="Editar plantilla"
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setTemplateToDelete(t);
-                        setIsTemplateModalOpen(true);
-                      }}
-                      className="p-1.5 rounded hover:bg-muted text-destructive"
-                      title="Eliminar plantilla"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+          {(() => {
+            const filteredTemplates = templates.filter(t => 
+              t.name.toLowerCase().includes(templateSearchQuery.toLowerCase()) ||
+              (t.description && t.description.toLowerCase().includes(templateSearchQuery.toLowerCase())) ||
+              (t.storagePath && t.storagePath.toLowerCase().includes(templateSearchQuery.toLowerCase()))
+            );
+
+            const templateItemsPerPage = 6;
+            const totalTemplatePages = Math.ceil(filteredTemplates.length / templateItemsPerPage);
+            const paginatedTemplates = filteredTemplates.slice(
+              (templateCurrentPage - 1) * templateItemsPerPage,
+              templateCurrentPage * templateItemsPerPage
+            );
+
+            return (
+              <div className="bg-card border border-border rounded-lg shadow-sm p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <h3 className="font-semibold text-foreground">Plantillas Existentes</h3>
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Buscar plantillas..."
+                      value={templateSearchQuery}
+                      onChange={(e) => setTemplateSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 text-xs rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none text-foreground"
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+                
+                {paginatedTemplates.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-muted-foreground italic">
+                    No se encontraron plantillas.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {paginatedTemplates.map(t => (
+                      <div key={t.id} className="p-4 rounded-lg border border-border hover:border-primary/50 transition-colors flex justify-between items-start bg-muted/10 relative">
+                        <div className="space-y-1 pr-8">
+                          <h4 className="text-xs font-bold text-foreground">{t.name}</h4>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2">{t.description}</p>
+                          <div className="pt-2 flex flex-wrap gap-2 items-center">
+                            <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium">
+                              {t.fields.length} campos
+                            </span>
+                            {t.storagePath && (
+                              <span className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 px-2 py-0.5 rounded-full font-mono font-medium">
+                                📁 {t.storagePath}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-muted-foreground">Creado: {t.createdAt}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Dropdown de Acciones */}
+                        <div className="relative shrink-0 z-20">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveActionsTemplateId(prev => prev === t.id ? null : t.id);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Acciones"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {activeActionsTemplateId === t.id && (
+                            <div className="absolute right-0 mt-1 w-44 bg-popover border border-border rounded-lg shadow-lg py-1 z-30 animate-in fade-in slide-in-from-top-1 duration-100">
+                              <button
+                                onClick={() => setPreviewTemplate(t)}
+                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-accent" />
+                                Ver vista previa
+                              </button>
+                              <button
+                                onClick={() => handleOpenExportModal(t)}
+                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                              >
+                                <FileDown className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                                Exportar registros
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setNewTemplate({
+                                    id: t.id,
+                                    name: t.name,
+                                    description: t.description,
+                                    footer: (t as any).footer || '',
+                                    storagePath: t.storagePath,
+                                    fields: t.fields || [],
+                                    assignedUsers: t.assignedUsers || [],
+                                    isQualityDocument: t.isQualityDocument || false,
+                                    qualityCode: t.qualityCode || '',
+                                    qualityVersion: t.qualityVersion || '',
+                                    qualityDate: t.qualityDate || ''
+                                  });
+                                  setDescriptionStyles((t as any).descriptionStyles || '');
+                                  setActiveEditorTab('editor');
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors flex items-center gap-2"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 text-primary" />
+                                Editar plantilla
+                              </button>
+                              <hr className="border-border my-1" />
+                              <button
+                                onClick={() => {
+                                  setTemplateToDelete(t);
+                                  setIsTemplateModalOpen(true);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-destructive hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Eliminar plantilla
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {totalTemplatePages > 1 && (
+                  <div className="flex items-center justify-between border-t border-border pt-4 mt-4">
+                    <span className="text-xs text-muted-foreground">
+                      Página {templateCurrentPage} de {totalTemplatePages} (Total: {filteredTemplates.length} plantillas)
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setTemplateCurrentPage(prev => Math.max(prev - 1, 1))}
+                        disabled={templateCurrentPage === 1}
+                        className="p-1.5 rounded-lg border border-border bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-foreground"
+                        title="Anterior"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setTemplateCurrentPage(prev => Math.min(prev + 1, totalTemplatePages))}
+                        disabled={templateCurrentPage === totalTemplatePages}
+                        className="p-1.5 rounded-lg border border-border bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-foreground"
+                        title="Siguiente"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2522,6 +2773,119 @@ export default function App() {
         </div>
       )}
 
+      {/* Modal para Exportar Registros de Plantilla */}
+      {isExportModalOpen && exportTemplate && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-bold text-foreground">Exportar Registros</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Plantilla: <strong className="text-foreground">{exportTemplate.name}</strong>
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsExportModalOpen(false);
+                    setExportTemplate(null);
+                    setTemplateVersions([]);
+                  }}
+                  className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {isLoadingVersions ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                  <p className="text-xs text-muted-foreground">Cargando versiones disponibles...</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-muted-foreground">Seleccione la versión del formulario</label>
+                    {templateVersions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No se encontraron versiones.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {templateVersions.map((v) => {
+                          const isSelected = selectedExportVersion === v.version;
+                          return (
+                            <button
+                              key={v.version}
+                              type="button"
+                              onClick={() => setSelectedExportVersion(v.version)}
+                              className={`w-full text-left p-3 rounded-lg border text-xs flex justify-between items-center transition-all ${
+                                isSelected 
+                                  ? 'border-primary bg-primary/5 ring-1 ring-primary' 
+                                  : 'border-border hover:border-muted-foreground/35 hover:bg-muted/10'
+                              }`}
+                            >
+                              <div className="space-y-0.5">
+                                <span className="font-semibold text-foreground">
+                                  {v.version === 'Sin versión' ? 'Sin versión (v0)' : `Versión: ${v.version}`}
+                                </span>
+                                <span className="block text-[10px] text-muted-foreground">
+                                  Último uso: {new Date(v.lastUsed).toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className={`inline-block px-2 py-0.5 rounded-full font-medium text-[10px] ${
+                                  v.documentCount > 0 
+                                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' 
+                                    : 'bg-muted text-muted-foreground border border-border'
+                                }`}>
+                                  {v.documentCount} {v.documentCount === 1 ? 'registro' : 'registros'}
+                                </span>
+                                <span className="block text-[9px] text-muted-foreground mt-0.5">
+                                  {v.fieldsCount} campos
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-border bg-muted/30 flex gap-3 justify-end">
+              <button 
+                onClick={() => {
+                  setIsExportModalOpen(false);
+                  setExportTemplate(null);
+                  setTemplateVersions([]);
+                }}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleExportRecords}
+                disabled={isLoadingVersions || isExporting || templateVersions.length === 0}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                {isExporting ? (
+                  <>
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    Exportando...
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="h-3 w-3" />
+                    Exportar Registros (Excel)
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Template Preview Modal */}
       {previewTemplate && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2589,6 +2953,18 @@ export default function App() {
 
                         {field.type === 'date' && (
                           <input type="date" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'time' && (
+                          <input type="time" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'datetime' && (
+                          <input type="datetime-local" disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed" />
+                        )}
+
+                        {field.type === 'textarea' && (
+                          <textarea placeholder="Área de texto enriquecido (Negrita, alineación)..." disabled className="w-full text-xs p-2 rounded border border-border bg-muted/10 opacity-70 cursor-not-allowed min-h-[60px]" />
                         )}
 
                         {field.type === 'photo' && (
@@ -2798,6 +3174,7 @@ export default function App() {
                       if (option) val = option.label || option.value;
                     }
                     mappedData[fieldDef.label] = val;
+                    mappedData[getFieldTagName(fieldDef, fields)] = val;
                   }
                 });
 

@@ -20,6 +20,16 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+function getFieldTagName(field: any, allFields: any[]) {
+  const hasDuplicate = allFields.some(
+    (f: any) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase()
+  );
+  if (hasDuplicate) {
+    return `${field.category || 'General'}: ${field.label}`;
+  }
+  return field.label;
+}
+
 export interface FileNode {
   id: string;
   name: string;
@@ -1180,7 +1190,10 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                 Object.keys(data).forEach(key => {
                   const fieldDef = fields.find((f: any) => f.id === key);
                   if (fieldDef && fieldDef.label) {
-                    const regex = new RegExp(`{{\\s*${fieldDef.label}\\s*}}`, 'gi');
+                    const tagName = getFieldTagName(fieldDef, fields);
+                    const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const escapedLabel = fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`{{\\s*(?:${escapedTagName}|${escapedLabel})\\s*}}`, 'gi');
                     const value = data[key];
                     if (typeof value === 'string' && value.startsWith('data:image/')) {
                        const placeholder = `__IMAGE_BLOCK_${key}__`;

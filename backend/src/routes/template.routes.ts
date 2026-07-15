@@ -10,6 +10,12 @@ router.get('/', authenticate, requireEmployee, templateController.getAll);
 // Obtener plantilla por ID
 router.get('/:id', authenticate, requireEmployee, templateController.getById);
 
+// Obtener versiones de la plantilla
+router.get('/:id/versions', authenticate, requireAdmin, templateController.getVersions);
+
+// Exportar registros de plantilla en formato Excel/CSV
+router.get('/:id/export', authenticate, requireAdmin, templateController.exportRecords);
+
 // Crear plantilla (solo admin)
 router.post('/', authenticate, requireAdmin, templateController.create);
 

@@ -58,6 +58,13 @@ async function getDocumentById(id) {
         templateSnapshot: undefined
     };
 }
+function getFieldTagName(field, allFields) {
+    const hasDuplicate = allFields.some((f) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase());
+    if (hasDuplicate) {
+        return `${field.category || 'General'}: ${field.label}`;
+    }
+    return field.label;
+}
 async function createDocument(data) {
     // Verificar que la plantilla existe
     const template = await prisma_1.default.template.findUnique({ where: { id: data.templateId } });
@@ -199,44 +206,55 @@ async function createDocument(data) {
             doc.addPage();
         }
     };
-    if (template.description) {
-        let formattedDescription = template.description;
-        const fields = template.fields;
-        // 1. Resolver los labels de los campos 'select' en lugar de mostrar los IDs
-        Object.entries(data.formData).forEach(([key, value]) => {
-            const fieldDef = fields?.find(f => f.id === key);
-            if (fieldDef && fieldDef.type === 'select') {
-                const option = fieldDef.options?.find((o) => String(o.id) === String(value) || String(o.value) === String(value));
-                if (option) {
-                    data.formData[key] = option.label || option.value;
+    const fields = template.fields || [];
+    let formattedDescription = template.description || '';
+    let formattedFooter = template.footer || '';
+    // 1. Resolver los labels de los campos 'select' en lugar de mostrar los IDs
+    Object.entries(data.formData).forEach(([key, value]) => {
+        const fieldDef = fields?.find(f => f.id === key);
+        if (fieldDef && fieldDef.type === 'select') {
+            const option = fieldDef.options?.find((o) => String(o.id) === String(value) || String(o.value) === String(value));
+            if (option) {
+                data.formData[key] = option.label || option.value;
+            }
+        }
+    });
+    // 2. Replace {{variable}} tokens with actual data values
+    const blockTokens = [];
+    Object.entries(data.formData).forEach(([key, value]) => {
+        const fieldDef = fields?.find(f => f.id === key);
+        if (fieldDef && fieldDef.label) {
+            const tagName = getFieldTagName(fieldDef, fields);
+            const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const escapedLabel = fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`{{\\s*(?:${escapedTagName}|${escapedLabel})\\s*}}`, 'gi');
+            if (typeof value === 'string' && value.startsWith('data:image/')) {
+                const placeholder = `__IMAGE_BLOCK_${key}__`;
+                if (regex.test(formattedDescription)) {
+                    formattedDescription = formattedDescription.replace(regex, placeholder);
+                    blockTokens.push({ placeholder, type: 'image', value });
+                }
+                if (regex.test(formattedFooter)) {
+                    formattedFooter = formattedFooter.replace(regex, '[Imagen]');
                 }
             }
-        });
-        // 2. Replace {{variable}} tokens with actual data values
-        const blockTokens = [];
-        Object.entries(data.formData).forEach(([key, value]) => {
-            const fieldDef = fields?.find(f => f.id === key);
-            if (fieldDef && fieldDef.label) {
-                const regex = new RegExp(`{{\\s*${fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*}}`, 'gi');
-                if (typeof value === 'string' && value.startsWith('data:image/')) {
-                    const placeholder = `__IMAGE_BLOCK_${key}__`;
-                    if (regex.test(formattedDescription)) {
-                        formattedDescription = formattedDescription.replace(regex, placeholder);
-                        blockTokens.push({ placeholder, type: 'image', value });
-                    }
+            else if (Array.isArray(value)) {
+                const placeholder = `__TABLE_BLOCK_${key}__`;
+                if (regex.test(formattedDescription)) {
+                    formattedDescription = formattedDescription.replace(regex, placeholder);
+                    blockTokens.push({ placeholder, type: 'table', value });
                 }
-                else if (Array.isArray(value)) {
-                    const placeholder = `__TABLE_BLOCK_${key}__`;
-                    if (regex.test(formattedDescription)) {
-                        formattedDescription = formattedDescription.replace(regex, placeholder);
-                        blockTokens.push({ placeholder, type: 'table', value });
-                    }
-                }
-                else {
-                    formattedDescription = formattedDescription.replace(regex, String(value));
+                if (regex.test(formattedFooter)) {
+                    formattedFooter = formattedFooter.replace(regex, '[Tabla]');
                 }
             }
-        });
+            else {
+                formattedDescription = formattedDescription.replace(regex, String(value));
+                formattedFooter = formattedFooter.replace(regex, String(value));
+            }
+        }
+    });
+    if (formattedDescription) {
         // 3. Simple HTML-to-PDF renderer
         // Strip HTML tags and render formatted content
         const renderHtmlToPdf = (html) => {
@@ -244,8 +262,6 @@ async function createDocument(data) {
             // Process: remove outer tags, handle inline formatting
             const stripHtml = (str) => str.replace(/<[^>]*>/g, '');
             // Parse HTML into structural blocks
-            const blockRegex = /<(h[1-3]|p|li|blockquote|hr)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>|<hr\s*\/?>/gi;
-            let lastIndex = 0;
             let match;
             const blocks = [];
             // Also handle text that's not wrapped in tags
@@ -254,18 +270,36 @@ async function createDocument(data) {
                 .replace(/<hr\s*\/?>/gi, '<hr></hr>')
                 // Wrap bare text lines in <p>
                 .replace(/^([^<]+)$/gm, '<p>$1</p>');
-            const blockPattern = /<(h[1-3]|p|li|blockquote|hr|table)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
-            // Handle list wrappers - extract <li> from <ul>/<ol>
-            let processedHtml = tempHtml
-                .replace(/<\/?ul[^>]*>/gi, '')
-                .replace(/<\/?ol[^>]*>/gi, '')
-                .replace(/<br\s*\/?>/gi, '\n');
+            const blockPattern = /<(h[1-3]|p|li|blockquote|hr|table|ol|ul)((?:\s+[^>]*)?)>([\s\S]*?)<\/\1>/gi;
+            let processedHtml = tempHtml.replace(/<br\s*\/?>/gi, '\n');
+            const rawBlocks = [];
             while ((match = blockPattern.exec(processedHtml)) !== null) {
                 const tag = match[1].toLowerCase();
                 const attrs = match[2] || '';
                 const content = match[3];
-                blocks.push({ tag, content, attrs });
+                rawBlocks.push({ tag, content, attrs });
             }
+            // Flatten list items
+            rawBlocks.forEach(block => {
+                if (block.tag === 'ol') {
+                    const liPattern = /<li((?:\s+[^>]*)?)>([\s\S]*?)<\/li>/gi;
+                    let liMatch;
+                    let idx = 1;
+                    while ((liMatch = liPattern.exec(block.content)) !== null) {
+                        blocks.push({ tag: 'li-ordered', content: liMatch[2], attrs: liMatch[1], listIndex: idx++ });
+                    }
+                }
+                else if (block.tag === 'ul') {
+                    const liPattern = /<li((?:\s+[^>]*)?)>([\s\S]*?)<\/li>/gi;
+                    let liMatch;
+                    while ((liMatch = liPattern.exec(block.content)) !== null) {
+                        blocks.push({ tag: 'li-unordered', content: liMatch[2], attrs: liMatch[1] });
+                    }
+                }
+                else {
+                    blocks.push(block);
+                }
+            });
             // If no blocks found, treat the entire content as one paragraph
             if (blocks.length === 0 && stripHtml(processedHtml).trim()) {
                 blocks.push({ tag: 'p', content: processedHtml, attrs: '' });
@@ -428,33 +462,6 @@ async function createDocument(data) {
                 if (styleMatch) {
                     align = styleMatch[1].toLowerCase();
                 }
-                // Determine font size and weight based on tag
-                let fontSize = paragraphFontSize;
-                let defaultFont = 'Helvetica';
-                if (block.tag === 'h1') {
-                    fontSize = paragraphFontSize + 6;
-                    defaultFont = 'Helvetica-Bold';
-                    checkPageBreak(fontSize + 10);
-                }
-                else if (block.tag === 'h2') {
-                    fontSize = paragraphFontSize + 4;
-                    defaultFont = 'Helvetica-Bold';
-                    checkPageBreak(fontSize + 8);
-                }
-                else if (block.tag === 'h3') {
-                    fontSize = paragraphFontSize + 2;
-                    defaultFont = 'Helvetica-Bold';
-                    checkPageBreak(fontSize + 6);
-                }
-                else if (block.tag === 'blockquote') {
-                    // Indent blockquotes
-                    doc.x = 70;
-                }
-                else if (block.tag === 'li') {
-                    // Add bullet point
-                    doc.font('Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
-                    doc.text('• ', { continued: true, align: 'left' });
-                }
                 // Parse inline formatting: <strong>, <em>, <u>, <s>, <a>
                 const inlineTokens = [];
                 let tempContent = block.content;
@@ -513,6 +520,40 @@ async function createDocument(data) {
                     return tokens;
                 };
                 const tokens = parseInlineHtml(tempContent);
+                // Determine font size and weight based on tag
+                let fontSize = paragraphFontSize;
+                let defaultFont = 'Helvetica';
+                if (block.tag === 'h1') {
+                    fontSize = paragraphFontSize + 6;
+                    defaultFont = 'Helvetica-Bold';
+                    checkPageBreak(fontSize + 10);
+                }
+                else if (block.tag === 'h2') {
+                    fontSize = paragraphFontSize + 4;
+                    defaultFont = 'Helvetica-Bold';
+                    checkPageBreak(fontSize + 8);
+                }
+                else if (block.tag === 'h3') {
+                    fontSize = paragraphFontSize + 2;
+                    defaultFont = 'Helvetica-Bold';
+                    checkPageBreak(fontSize + 6);
+                }
+                else if (block.tag === 'blockquote') {
+                    // Indent blockquotes
+                    doc.x = 70;
+                }
+                else if (block.tag === 'li' || block.tag === 'li-unordered') {
+                    // Add bullet point, check if bold
+                    const isBold = tokens.length > 0 && tokens[0].bold;
+                    doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
+                    doc.text('• ', { continued: true, align: 'left' });
+                }
+                else if (block.tag === 'li-ordered') {
+                    // Add numbered list item, check if bold
+                    const isBold = tokens.length > 0 && tokens[0].bold;
+                    doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
+                    doc.text(`${block.listIndex || 1}. `, { continued: true, align: 'left' });
+                }
                 doc.fillColor('#000000').fontSize(fontSize);
                 if (tokens.length === 0) {
                     doc.moveDown(0.3);
@@ -558,7 +599,6 @@ async function createDocument(data) {
         doc.moveDown(1.5);
     }
     // ─── CAMPOS AGRUPADOS POR CATEGORÍA ───
-    const fields = template.fields || [];
     const fieldsByCategory = {};
     fields.forEach(field => {
         if (field.hideInPdf)
@@ -644,7 +684,27 @@ async function createDocument(data) {
         const bottom = doc.page.margins.bottom;
         doc.page.margins.bottom = 0;
         doc.fillColor('#6B7280').fontSize(8).font('Helvetica');
-        doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha de diligenciamiento: ${new Date().toLocaleString()}`, 50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100 });
+        let footerText = '';
+        if (formattedFooter) {
+            footerText = formattedFooter
+                .replace(/<br\s*\/?>/gi, '\n') // Keep linebreaks in the footer
+                .replace(/<[^>]*>/g, '') // Strip all HTML tags
+                .trim();
+        }
+        if (footerText) {
+            // Draw a line separator above the custom footer
+            doc.lineWidth(0.5).strokeColor('#cccccc');
+            doc.moveTo(50, doc.page.height - 60).lineTo(doc.page.width - 50, doc.page.height - 60).stroke();
+            doc.fillColor('#4B5563').fontSize(8).font('Helvetica');
+            doc.text(footerText, 50, doc.page.height - 52, { align: 'center', width: doc.page.width - 100 });
+            // Render the system audit footer slightly lower
+            doc.fillColor('#6B7280').fontSize(7);
+            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha: ${new Date().toLocaleString()}`, 50, doc.page.height - 24, { align: 'center', width: doc.page.width - 100 });
+        }
+        else {
+            // Standard audit footer only
+            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha de diligenciamiento: ${new Date().toLocaleString()}`, 50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100 });
+        }
         doc.page.margins.bottom = bottom;
     }
     doc.end();
