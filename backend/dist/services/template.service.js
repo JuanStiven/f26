@@ -9,6 +9,8 @@ exports.getTemplateById = getTemplateById;
 exports.createTemplate = createTemplate;
 exports.updateTemplate = updateTemplate;
 exports.deleteTemplate = deleteTemplate;
+exports.getTemplateVersions = getTemplateVersions;
+exports.exportTemplateRecords = exportTemplateRecords;
 const prisma_1 = __importDefault(require("../models/prisma"));
 async function getAllTemplates() {
     return prisma_1.default.template.findMany({
@@ -61,6 +63,7 @@ async function createTemplate(data) {
             name: data.name,
             description: data.description || '',
             descriptionStyles: data.descriptionStyles || '',
+            footer: data.footer || '',
             storagePath: data.storagePath || '',
             fields: data.fields,
             isQualityDocument: data.isQualityDocument || false,
@@ -69,6 +72,9 @@ async function createTemplate(data) {
             qualityDate: data.qualityDate || '',
             isCreativeMode: data.isCreativeMode || false,
             creativeElements: data.creativeElements || [],
+            isDocxTemplate: data.isDocxTemplate || false,
+            docxFilePath: data.docxFilePath || null,
+            docxOriginalName: data.docxOriginalName || null,
             assignedUsers: data.assignedUsers ? {
                 connect: data.assignedUsers.map(id => ({ id }))
             } : undefined
@@ -90,6 +96,7 @@ async function updateTemplate(id, data) {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.description !== undefined && { description: data.description }),
             ...(data.descriptionStyles !== undefined && { descriptionStyles: data.descriptionStyles }),
+            ...(data.footer !== undefined && { footer: data.footer }),
             ...(data.storagePath !== undefined && { storagePath: data.storagePath }),
             ...(data.fields !== undefined && { fields: data.fields }),
             ...(data.isQualityDocument !== undefined && { isQualityDocument: data.isQualityDocument }),
@@ -98,6 +105,9 @@ async function updateTemplate(id, data) {
             ...(data.qualityDate !== undefined && { qualityDate: data.qualityDate }),
             ...(data.isCreativeMode !== undefined && { isCreativeMode: data.isCreativeMode }),
             ...(data.creativeElements !== undefined && { creativeElements: data.creativeElements }),
+            ...(data.isDocxTemplate !== undefined && { isDocxTemplate: data.isDocxTemplate }),
+            ...(data.docxFilePath !== undefined && { docxFilePath: data.docxFilePath }),
+            ...(data.docxOriginalName !== undefined && { docxOriginalName: data.docxOriginalName }),
             ...(data.assignedUsers !== undefined && {
                 assignedUsers: {
                     set: data.assignedUsers.map(userId => ({ id: userId }))
@@ -116,5 +126,143 @@ async function deleteTemplate(id) {
         throw { status: 404, message: 'Plantilla no encontrada.' };
     }
     return prisma_1.default.template.delete({ where: { id } });
+}
+async function getTemplateVersions(templateId) {
+    const template = await prisma_1.default.template.findUnique({ where: { id: templateId } });
+    if (!template) {
+        throw { status: 404, message: 'Plantilla no encontrada.' };
+    }
+    const documents = await prisma_1.default.signedDocument.findMany({
+        where: { templateId },
+        select: {
+            templateSnapshot: true,
+            createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+    const versionsMap = new Map();
+    for (const doc of documents) {
+        const snapshot = doc.templateSnapshot;
+        const version = snapshot?.qualityVersion || 'Sin versión';
+        const fields = snapshot?.fields || [];
+        if (!versionsMap.has(version)) {
+            versionsMap.set(version, {
+                version,
+                fieldsCount: fields.length,
+                documentCount: 1,
+                lastUsed: doc.createdAt
+            });
+        }
+        else {
+            const entry = versionsMap.get(version);
+            entry.documentCount++;
+            if (doc.createdAt > entry.lastUsed) {
+                entry.lastUsed = doc.createdAt;
+            }
+        }
+    }
+    // Also include the current template's version if not already present
+    const currentVersion = template.qualityVersion || 'Sin versión';
+    if (!versionsMap.has(currentVersion)) {
+        versionsMap.set(currentVersion, {
+            version: currentVersion,
+            fieldsCount: (template.fields || []).length,
+            documentCount: 0,
+            lastUsed: template.updatedAt
+        });
+    }
+    return Array.from(versionsMap.values());
+}
+async function exportTemplateRecords(templateId, version) {
+    const template = await prisma_1.default.template.findUnique({ where: { id: templateId } });
+    if (!template) {
+        throw { status: 404, message: 'Plantilla no encontrada.' };
+    }
+    // Get all documents filled for this template
+    const documents = await prisma_1.default.signedDocument.findMany({
+        where: { templateId },
+        include: {
+            filledBy: {
+                select: {
+                    name: true,
+                    document: true
+                }
+            }
+        },
+        orderBy: { createdAt: 'desc' }
+    });
+    // Filter documents by templateSnapshot version
+    // If version is "Sin versión", we match empty or missing versions
+    const targetVersion = version === 'Sin versión' ? '' : version;
+    const filteredDocs = documents.filter(doc => {
+        const snapshot = doc.templateSnapshot;
+        const docVer = snapshot?.qualityVersion || '';
+        if (!targetVersion) {
+            return !docVer;
+        }
+        return docVer.toLowerCase() === targetVersion.toLowerCase();
+    });
+    // Get the fields schema for this version.
+    let fields = [];
+    if (filteredDocs.length > 0) {
+        const firstSnapshot = filteredDocs[0].templateSnapshot;
+        fields = firstSnapshot?.fields || [];
+    }
+    else {
+        // If version matches current version of template, use template's fields
+        const currentVersion = template.qualityVersion || '';
+        if (currentVersion.toLowerCase() === targetVersion.toLowerCase()) {
+            fields = template.fields || [];
+        }
+    }
+    // Helper to escape cells according to RFC 4180
+    const escapeCsvCell = (val) => {
+        if (val === undefined || val === null)
+            return '""';
+        let str = '';
+        if (typeof val === 'object') {
+            if (Array.isArray(val)) {
+                str = val.map((row, idx) => {
+                    const rowStr = Object.entries(row)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(', ');
+                    return `[Fila ${idx + 1}: ${rowStr}]`;
+                }).join('\n');
+            }
+            else {
+                str = JSON.stringify(val);
+            }
+        }
+        else {
+            str = String(val);
+        }
+        return `"${str.replace(/"/g, '""')}"`;
+    };
+    // Build CSV
+    const headers = [
+        '"ID Documento"',
+        '"Fecha Diligenciamiento"',
+        '"Diligenciado Por (Nombre)"',
+        '"Diligenciado Por (Cédula)"',
+        '"Estado Sincronización"',
+        ...fields.map(f => escapeCsvCell(f.label))
+    ];
+    const rows = [headers.join(',')];
+    for (const doc of filteredDocs) {
+        const formData = (doc.data || {});
+        const rowCells = [
+            escapeCsvCell(doc.id),
+            escapeCsvCell(doc.createdAt.toISOString()),
+            escapeCsvCell(doc.filledBy?.name || 'Sistema'),
+            escapeCsvCell(doc.filledBy?.document || 'N/A'),
+            escapeCsvCell(doc.syncStatus),
+            ...fields.map(f => {
+                const val = formData[f.id];
+                return escapeCsvCell(val);
+            })
+        ];
+        rows.push(rowCells.join(','));
+    }
+    return rows.join('\r\n');
 }
 //# sourceMappingURL=template.service.js.map

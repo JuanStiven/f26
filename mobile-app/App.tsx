@@ -17,11 +17,16 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import SignatureScreen from 'react-native-signature-canvas';
-import { Picker } from '@react-native-picker/picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { WebView } from 'react-native-webview';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './src/theme/colors';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { TemplatesScreen } from './src/screens/TemplatesScreen';
+import { FillFormScreen } from './src/screens/FillFormScreen';
+import { OfflineDocsScreen } from './src/screens/OfflineDocsScreen';
+import { DraftsScreen } from './src/screens/DraftsScreen';
+import { HistoryScreen } from './src/screens/HistoryScreen';
 
 // Datos de simulación para los empleados de la ESE Norte 3
 const EMPLOYEES_DB = [
@@ -29,6 +34,32 @@ const EMPLOYEES_DB = [
   { id: '2', name: 'Laura Camila Ortiz', doc: '1087654321', pin: '5678', role: 'Enfermera Jefa', status: 'Activo' },
   { id: '3', name: 'Andrés Felipe Restrepo', doc: '1076543210', pin: '0000', role: 'Técnico Domiciliario', status: 'Inactivo' }
 ];
+
+const formatDate = (date: Date) => {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const parseDateString = (str: string) => {
+  if (!str) return new Date();
+  if (str.includes('/')) {
+    const parts = str.split(' ');
+    const dateParts = parts[0].split('/');
+    const d = parseInt(dateParts[0], 10);
+    const m = parseInt(dateParts[1], 10) - 1;
+    const y = parseInt(dateParts[2], 10);
+    const date = new Date(y, m, d);
+    if (parts[1]) {
+      const timeParts = parts[1].split(':');
+      date.setHours(parseInt(timeParts[0], 10), parseInt(timeParts[1], 10), 0, 0);
+    }
+    return date;
+  }
+  const parsed = new Date(str);
+  return isNaN(parsed.getTime()) ? new Date() : parsed;
+};
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -48,10 +79,18 @@ export default function App() {
   // Formulario Dinámico (Simulado para llenar en la tablet)
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
-  const [showDatePicker, setShowDatePicker] = useState<{ visible: boolean, fieldId: string | null }>({ visible: false, fieldId: null });
+  const [showDatePicker, setShowDatePicker] = useState<{ visible: boolean, fieldId: string | null, mode?: 'date' | 'time' | 'datetime' }>({ visible: false, fieldId: null, mode: 'date' });
   const [signatureModalVisible, setSignatureModalVisible] = useState(false);
   const [activeSignatureFieldId, setActiveSignatureFieldId] = useState<string | null>(null);
   const signatureRef = useRef<any>(null);
+
+  // States for Rich Text Area editor modal
+  const [richTextModalVisible, setRichTextModalVisible] = useState(false);
+  const [activeRichTextFieldId, setActiveRichTextFieldId] = useState<string | null>(null);
+  const [activeRichTextLabel, setActiveRichTextLabel] = useState('');
+  const [tempRichTextHtml, setTempRichTextHtml] = useState('');
+  const [initialRichTextHtml, setInitialRichTextHtml] = useState('');
+  const [showDocumentPreview, setShowDocumentPreview] = useState(true);
 
   const [templates, setTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -329,29 +368,219 @@ export default function App() {
     setErrorMessage('');
   };
 
+  const getRichEditorHtml = (initialValue: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #F8FAFC;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      background-color: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px 12px 0 0;
+      border-bottom: none;
+    }
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .btn {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #475569;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 38px;
+      height: 36px;
+      transition: all 0.2s;
+    }
+    .btn:active, .btn.active {
+      background: #004F9F;
+      color: #FFFFFF;
+      border-color: #004F9F;
+    }
+    #editor-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    #editor {
+      flex: 1;
+      border: 1px solid #E2E8F0;
+      border-radius: 0 0 12px 12px;
+      background-color: #FFFFFF;
+      padding: 16px;
+      font-size: 16px;
+      line-height: 1.6;
+      outline: none;
+      overflow-y: auto;
+      -webkit-user-select: text;
+      color: #000000;
+    }
+    #editor:focus {
+      border-color: #004F9F;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <div class="toolbar-row">
+      <button class="btn" id="btn-bold" onclick="format('bold', 'btn-bold')"><b>B</b></button>
+      <button class="btn" id="btn-italic" onclick="format('italic', 'btn-italic')"><i>I</i></button>
+      <button class="btn" id="btn-underline" onclick="format('underline', 'btn-underline')"><u>U</u></button>
+      <button class="btn" id="btn-strike" onclick="format('strikeThrough', 'btn-strike')"><s>S</s></button>
+      <button class="btn" id="btn-ul" onclick="format('insertUnorderedList', 'btn-ul')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"></line><line x1="9" y1="12" x2="20" y2="12"></line><line x1="9" y1="18" x2="20" y2="18"></line><circle cx="4" cy="6" r="1.5" fill="currentColor"></circle><circle cx="4" cy="12" r="1.5" fill="currentColor"></circle><circle cx="4" cy="18" r="1.5" fill="currentColor"></circle></svg>
+      </button>
+      <button class="btn" id="btn-ol" onclick="format('insertOrderedList', 'btn-ol')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg>
+      </button>
+    </div>
+    <div class="toolbar-row" style="margin-top: 4px;">
+      <button class="btn" id="btn-left" onclick="format('justifyLeft', 'btn-left')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="17" y1="10" x2="3" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="15" y1="18" x2="3" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-center" onclick="format('justifyCenter', 'btn-center')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="18" y1="10" x2="6" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-right" onclick="format('justifyRight', 'btn-right')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="10" x2="7" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="9" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-justify" onclick="format('justifyFull', 'btn-justify')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="10" x2="3" y2="10"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>
+      </button>
+      <button class="btn" id="btn-clear" onclick="format('removeFormat', 'btn-clear')" style="margin-left: auto;">🧹 Limpiar</button>
+    </div>
+  </div>
+  <div id="editor-container">
+    <div id="editor" contenteditable="true"></div>
+  </div>
+
+  <script>
+    const editor = document.getElementById('editor');
+    
+    // Inject initial content
+    editor.innerHTML = ${JSON.stringify(initialValue || '')};
+
+    function format(command, btnId) {
+      document.execCommand(command, false, null);
+      editor.focus();
+      updateButtonStates();
+      sendContent();
+    }
+
+    function updateButtonStates() {
+      const formats = {
+        'bold': 'btn-bold',
+        'italic': 'btn-italic',
+        'underline': 'btn-underline',
+        'strikeThrough': 'btn-strike',
+        'insertUnorderedList': 'btn-ul',
+        'insertOrderedList': 'btn-ol',
+        'justifyLeft': 'btn-left',
+        'justifyCenter': 'btn-center',
+        'justifyRight': 'btn-right',
+        'justifyFull': 'btn-justify'
+      };
+
+      for (const [cmd, id] of Object.entries(formats)) {
+        const el = document.getElementById(id);
+        if (el) {
+          try {
+            const state = document.queryCommandState(cmd);
+            el.classList.toggle('active', !!state);
+          } catch(e) {}
+        }
+      }
+    }
+
+    function sendContent() {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(editor.innerHTML);
+      }
+    }
+
+    editor.addEventListener('input', sendContent);
+    editor.addEventListener('blur', sendContent);
+    editor.addEventListener('keyup', updateButtonStates);
+    editor.addEventListener('mouseup', updateButtonStates);
+  </script>
+</body>
+</html>
+  `;
+
   const renderRichDescription = (description: string, data: any, fields: any[] = []) => {
     if (!description) return <Text style={{ fontSize: 14, color: '#4B5563', marginBottom: 16 }}>Sin descripción</Text>;
 
+    const getFieldTagName = (field: any, allFields: any[]) => {
+      const hasDuplicate = allFields.some(
+        (f: any) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase()
+      );
+      if (hasDuplicate) {
+        return `${field.category || 'General'}: ${field.label}`;
+      }
+      return field.label;
+    };
+
     const mappedData: Record<string, any> = {};
-    Object.keys(data || {}).forEach(key => {
-      const fieldDef = fields.find((f: any) => f.id === key);
-      if (fieldDef && fieldDef.label) {
-        let val = data[key];
-        if (fieldDef.type === 'select') {
-          const option = fieldDef.options?.find((o: any) => String(o.id) === String(val) || String(o.value) === String(val));
+    fields.forEach((fieldDef: any) => {
+      let val = data[fieldDef.id] !== undefined ? data[fieldDef.id] : data[fieldDef.label];
+      if (val !== undefined && val !== null) {
+        if (fieldDef.type === 'select' && fieldDef.options) {
+          const option = fieldDef.options.find((o: any) => String(o.id) === String(val) || String(o.value) === String(val));
           if (option) val = option.label || option.value;
         }
-        mappedData[fieldDef.label] = val;
+        mappedData[fieldDef.id] = val;
+        if (fieldDef.tag) {
+          const cleanTag = String(fieldDef.tag).replace(/[{}]/g, '').trim();
+          mappedData[fieldDef.tag] = val;
+          mappedData[cleanTag] = val;
+        }
+        if (fieldDef.label) {
+          mappedData[fieldDef.label] = val;
+          mappedData[getFieldTagName(fieldDef, fields)] = val;
+        }
       }
     });
 
-    // Replace {{variable}} tokens with data values, handling images/tables as placeholders
+    Object.entries(data || {}).forEach(([k, v]) => {
+      if (mappedData[k] === undefined) mappedData[k] = v;
+    });
+
+    // Replace {{variable}}, {variable}, or <<variable>> tokens with data values
     let processed = description;
     const blockTokens: { placeholder: string; type: 'image' | 'table'; value: any }[] = [];
 
     Object.keys(mappedData).forEach(label => {
       const value = mappedData[label];
-      const regex = new RegExp(`{{\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*}}`, 'gi');
+      if (value === undefined || value === null || value === '') return;
+
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(?:{{\\s*${escapedLabel}\\s*}}|{\\s*${escapedLabel}\\s*}|<<\\s*${escapedLabel}\\s*>>)`, 'gi');
       
       if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
         const placeholder = `__IMG_${label.replace(/\s+/g, '_')}__`;
@@ -361,7 +590,7 @@ export default function App() {
         const placeholder = `__TBL_${label.replace(/\s+/g, '_')}__`;
         processed = processed.replace(regex, placeholder);
         blockTokens.push({ placeholder, type: 'table', value });
-      } else if (value !== undefined) {
+      } else {
         processed = processed.replace(regex, String(value));
       }
     });
@@ -638,6 +867,54 @@ export default function App() {
 
   const handleSaveDocument = async () => {
     if (!selectedTemplate) return;
+
+    // Validar campos obligatorios
+    const missingFields: string[] = [];
+    if (selectedTemplate.fields && Array.isArray(selectedTemplate.fields)) {
+      selectedTemplate.fields.forEach((field: any) => {
+        if (field.required) {
+          const value = formData[field.id];
+          let isEmpty = false;
+          
+          if (value === undefined || value === null) {
+            isEmpty = true;
+          } else if (field.type === 'table') {
+            if (!Array.isArray(value) || value.length === 0) {
+              isEmpty = true;
+            } else {
+              const allRowsEmpty = value.every((row: any) => 
+                Object.values(row).every((cellVal: any) => String(cellVal || '').trim() === '')
+              );
+              if (allRowsEmpty) {
+                isEmpty = true;
+              }
+            }
+          } else if (field.type === 'textarea') {
+            const strippedText = String(value || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim();
+            if (strippedText === '') {
+              isEmpty = true;
+            }
+          } else {
+            if (String(value).trim() === '') {
+              isEmpty = true;
+            }
+          }
+          
+          if (isEmpty) {
+            missingFields.push(field.label);
+          }
+        }
+      });
+    }
+
+    if (missingFields.length > 0) {
+      Alert.alert(
+        'Campos Obligatorios',
+        `Por favor, complete los siguientes campos obligatorios antes de guardar el documento:\n\n${missingFields.map(f => `• ${f}`).join('\n')}`
+      );
+      return;
+    }
+
     try {
       const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
       const response = await fetch(`${API_URL}/documents`, {
@@ -902,653 +1179,172 @@ export default function App() {
 
         {/* Content Screens */}
         <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 200 : 120}
         >
         <ScrollView style={styles.mainContent} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {currentScreen === 'dashboard' && (
-            <View style={styles.dashboardView}>
-              <Text style={styles.sectionTitle}>Acciones Principales</Text>
-              
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => setCurrentScreen('templates')}
-              >
-                <View style={[styles.menuIconBox, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.menuIcon}>📝</Text>
-                </View>
-                <View style={styles.menuText}>
-                  <Text style={styles.menuTitle}>Ver Plantillas</Text>
-                  <Text style={styles.menuDesc}>Generar actas, registros y firmas</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => setCurrentScreen('offline_docs')}
-              >
-                <View style={[styles.menuIconBox, { backgroundColor: colors.accent }]}>
-                  <Text style={styles.menuIcon}>💾</Text>
-                </View>
-                <View style={styles.menuText}>
-                  <Text style={styles.menuTitle}>Documentos Locales</Text>
-                  <Text style={styles.menuDesc}>Ver archivos guardados offline</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => setCurrentScreen('drafts')}
-              >
-                <View style={[styles.menuIconBox, { backgroundColor: '#F59E0B' }]}>
-                  <Text style={styles.menuIcon}>📝</Text>
-                </View>
-                <View style={styles.menuText}>
-                  <Text style={styles.menuTitle}>Borradores</Text>
-                  <Text style={styles.menuDesc}>Continuar diligenciando documentos</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => setCurrentScreen('history')}
-              >
-                <View style={[styles.menuIconBox, { backgroundColor: '#10B981' }]}>
-                  <Text style={styles.menuIcon}>🕒</Text>
-                </View>
-                <View style={styles.menuText}>
-                  <Text style={styles.menuTitle}>Histórico</Text>
-                  <Text style={styles.menuDesc}>Ver mis documentos diligenciados</Text>
-                </View>
-              </TouchableOpacity>
-
-              {/* Status Box */}
-              <View style={styles.statusBox}>
-                <Text style={styles.statusBoxTitle}>Sincronización Local</Text>
-                <Text style={styles.statusBoxText}>
-                  La aplicación almacena automáticamente tus firmas localmente en la tablet cuando no tienes internet. Al detectar conexión, sincroniza en segundo plano.
-                </Text>
-              </View>
-
-              {/* Botón Salir */}
-              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
-              </TouchableOpacity>
-            </View>
+            <HomeScreen
+              onNavigate={(screen) => setCurrentScreen(screen)}
+              onLogout={handleLogout}
+              styles={styles}
+            />
           )}
 
-              {/* Screen: Templates List */}
           {currentScreen === 'templates' && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('dashboard')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle}>Plantillas Asignadas</Text>
-                <TouchableOpacity onPress={fetchTemplates} style={{ padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8 }}>
-                  <Text style={{ fontSize: 16 }}>🔄</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ marginBottom: 15 }}>
-                <TextInput
-                  style={[styles.fieldInput, { backgroundColor: '#F9FAFB', marginBottom: 0 }]}
-                  placeholder="Buscar plantilla..."
-                  value={templateSearchTerm}
-                  onChangeText={(t) => {
-                    setTemplateSearchTerm(t);
-                    setTemplatePage(1);
-                  }}
-                />
-              </View>
-
-              {loadingTemplates ? (
-                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
-              ) : paginatedTemplates.length === 0 ? (
-                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No hay plantillas disponibles.</Text>
-              ) : (
-                <View>
-                  {paginatedTemplates.map((template) => (
-                    <View key={template.id} style={styles.templateCard}>
-                      <Text style={styles.templateCardTitle}>{template.name}</Text>
-                      <Text style={styles.templateCardDesc} numberOfLines={2}>{template.description || 'Sin descripción'}</Text>
-                      <TouchableOpacity 
-                        style={styles.fillBtn} 
-                        onPress={() => {
-                          setSelectedTemplate(template);
-                          setFormData({});
-                          setActiveDraftId(null);
-                          setCurrentScreen('fill_form');
-                        }}
-                      >
-                        <Text style={styles.fillBtnText}>Diligenciar Formulario</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                  
-                  {/* Paginación */}
-                  {totalTemplatePages > 1 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, paddingHorizontal: 10 }}>
-                      <TouchableOpacity 
-                        onPress={() => setTemplatePage(p => Math.max(1, p - 1))}
-                        disabled={templatePage === 1}
-                        style={{ padding: 10, opacity: templatePage === 1 ? 0.5 : 1 }}
-                      >
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Anterior</Text>
-                      </TouchableOpacity>
-                      <Text style={{ color: '#4B5563' }}>{templatePage} / {totalTemplatePages}</Text>
-                      <TouchableOpacity 
-                        onPress={() => setTemplatePage(p => Math.min(totalTemplatePages, p + 1))}
-                        disabled={templatePage === totalTemplatePages}
-                        style={{ padding: 10, opacity: templatePage === totalTemplatePages ? 0.5 : 1 }}
-                      >
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Siguiente</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
+            <TemplatesScreen
+              loadingTemplates={loadingTemplates}
+              paginatedTemplates={paginatedTemplates}
+              templateSearchTerm={templateSearchTerm}
+              setTemplateSearchTerm={setTemplateSearchTerm}
+              templatePage={templatePage}
+              setTemplatePage={setTemplatePage}
+              totalTemplatePages={totalTemplatePages}
+              fetchTemplates={fetchTemplates}
+              onSelectTemplate={(template) => {
+                setSelectedTemplate(template);
+                setFormData({});
+                setActiveDraftId(null);
+                setCurrentScreen('fill_form');
+              }}
+              onBack={() => setCurrentScreen('dashboard')}
+              styles={styles}
+            />
           )}
 
-          {/* Screen: Fill Form */}
           {currentScreen === 'fill_form' && selectedTemplate && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('templates')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle} numberOfLines={1}>{selectedTemplate.name}</Text>
-              </View>
-
-              <View style={styles.formContainer}>
-                    {selectedTemplate.description ? (
-                      <View style={{ marginBottom: 16 }}>
-                        {renderRichDescription(selectedTemplate.description, formData || {}, selectedTemplate.fields || [])}
-                      </View>
-                    ) : null}
-                    
-                    {selectedTemplate.fields?.map((field: any, index: number) => {
-                      const showCategory = index === 0 || field.category !== selectedTemplate.fields[index - 1].category;
-                      return (
-                        <View key={field.id}>
-                          {showCategory && field.category && (
-                            <View style={styles.categoryHeader}>
-                              <Text style={styles.categoryHeaderText}>{field.category}</Text>
-                            </View>
-                          )}
-                          <View style={styles.fieldGroup}>
-                        <Text style={styles.fieldLabel}>{field.label} {field.required ? '*' : ''}</Text>
-                        
-                        {field.type === 'text' && (
-                          <TextInput 
-                            style={styles.fieldInput} 
-                            placeholder="Escribe aquí..."
-                            value={formData[field.id] || ''}
-                            onChangeText={(t) => setFormData((prev: any) => ({...prev, [field.id]: t}))}
-                          />
-                        )}
-                        
-                        {field.type === 'number' && (
-                          <TextInput 
-                            style={styles.fieldInput} 
-                            placeholder="Ej. 123"
-                            keyboardType="numeric"
-                            value={formData[field.id] || ''}
-                            onChangeText={(t) => setFormData((prev: any) => ({...prev, [field.id]: t}))}
-                          />
-                        )}
-
-                        {field.type === 'date' && (
-                          <View>
-                            <TouchableOpacity onPress={() => setShowDatePicker({ visible: true, fieldId: field.id })} style={[styles.fieldInput, { justifyContent: 'center' }]}>
-                              <Text style={{ color: formData[field.id] ? colors.text : '#A1A1AA' }}>
-                                {formData[field.id] || 'DD/MM/AAAA'}
-                              </Text>
-                            </TouchableOpacity>
-                            {showDatePicker.visible && showDatePicker.fieldId === field.id && (
-                              <DateTimePicker
-                                value={formData[field.id] ? new Date(formData[field.id]) : new Date()}
-                                mode="date"
-                                display="default"
-                                onChange={(event, selectedDate) => {
-                                  setShowDatePicker({ visible: false, fieldId: null });
-                                  if (selectedDate && event.type !== 'dismissed') {
-                                    const dateStr = selectedDate.toISOString().split('T')[0];
-                                    setFormData((prev: any) => ({...prev, [field.id]: dateStr}));
-                                  }
-                                }}
-                              />
-                            )}
-                          </View>
-                        )}
-                        
-                        {field.type === 'photo' && (
-                          <View>
-                            {formData[field.id] ? (
-                              <View style={{ position: 'relative' }}>
-                                <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 200, borderRadius: 8 }} resizeMode="cover" />
-                                <TouchableOpacity 
-                                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
-                                  onPress={() => handleTakePhoto(field.id)}
-                                >
-                                  <Text style={{ color: 'white', fontSize: 12 }}>🔄 Retomar</Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : (
-                              <TouchableOpacity style={styles.photoBtn} onPress={() => handleTakePhoto(field.id)}>
-                                <Text style={styles.photoBtnText}>📸 Tomar Foto</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
-                        
-                        {field.type === 'signature' && (
-                          <View>
-                            {formData[field.id] ? (
-                              <View style={{ position: 'relative', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }}>
-                                <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 150 }} resizeMode="contain" />
-                                <TouchableOpacity 
-                                  style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
-                                  onPress={() => {
-                                    setActiveSignatureFieldId(field.id);
-                                    setSignatureModalVisible(true);
-                                  }}
-                                >
-                                  <Text style={{ color: 'white', fontSize: 12 }}>🔄 Firmar de nuevo</Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : (
-                              <TouchableOpacity style={styles.signatureBtn} onPress={() => {
-                                setActiveSignatureFieldId(field.id);
-                                setSignatureModalVisible(true);
-                              }}>
-                                <Text style={styles.signatureBtnText}>✍️ Firmar Documento</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
-
-                        {field.type === 'dropdown' && (
-                          <View style={[styles.fieldInput, { padding: 0, justifyContent: 'center' }]}>
-                            <Picker
-                              selectedValue={formData[field.id] || ''}
-                              onValueChange={(itemValue) => setFormData((prev: any) => ({...prev, [field.id]: itemValue}))}
-                              style={{ width: '100%', color: formData[field.id] ? colors.text : '#A1A1AA' }}
-                            >
-                              <Picker.Item label="Seleccionar opción..." value="" color="#A1A1AA" />
-                              {(field.options || []).map((opt: string, i: number) => (
-                                <Picker.Item key={i} label={opt} value={opt} color={colors.text} />
-                              ))}
-                            </Picker>
-                          </View>
-                        )}
-
-                        {field.type === 'table' && (
-                          <View style={{ marginTop: 8 }}>
-                            <ScrollView horizontal style={{ borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, marginBottom: 8, backgroundColor: 'white' }}>
-                              <View>
-                                <View style={{ flexDirection: 'row', backgroundColor: '#F3F4F6', padding: 8, borderBottomWidth: 1, borderColor: '#E5E7EB' }}>
-                                  {(field.columns || []).map((col: string, i: number) => (
-                                    <Text key={i} style={{ width: 120, fontWeight: 'bold', fontSize: 12, color: '#4B5563', marginRight: 8 }} numberOfLines={1}>{col}</Text>
-                                  ))}
-                                  <Text style={{ width: 40 }}></Text>
-                                </View>
-                                {Array.isArray(formData[field.id]) && formData[field.id].map((row: any, rowIndex: number) => (
-                                  <View key={rowIndex} style={{ flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderColor: '#F3F4F6' }}>
-                                    {(field.columns || []).map((col: string, colIndex: number) => (
-                                      <TextInput
-                                        key={colIndex}
-                                        style={{ width: 120, height: 35, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 4, paddingHorizontal: 8, marginRight: 8, fontSize: 12, backgroundColor: '#F9FAFB' }}
-                                        value={row[col] || ''}
-                                        onChangeText={(t) => {
-                                          const newData = [...(formData[field.id] || [])];
-                                          newData[rowIndex] = { ...newData[rowIndex], [col]: t };
-                                          setFormData((prev: any) => ({ ...prev, [field.id]: newData }));
-                                        }}
-                                        placeholder={col}
-                                      />
-                                    ))}
-                                    <TouchableOpacity 
-                                      style={{ width: 40, height: 35, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FEE2E2', borderRadius: 4 }}
-                                      onPress={() => {
-                                        const newData = [...(formData[field.id] || [])];
-                                        newData.splice(rowIndex, 1);
-                                        setFormData((prev: any) => ({ ...prev, [field.id]: newData }));
-                                      }}
-                                    >
-                                      <Text style={{ color: '#EF4444', fontSize: 16, fontWeight: 'bold' }}>×</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                ))}
-                              </View>
-                            </ScrollView>
-                            <TouchableOpacity 
-                              style={{ backgroundColor: '#EFF6FF', padding: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' }}
-                              onPress={() => {
-                                const newRow: any = {};
-                                (field.columns || []).forEach((c: string) => newRow[c] = '');
-                                setFormData((prev: any) => ({ ...prev, [field.id]: [...(prev[field.id] || []), newRow] }));
-                              }}
-                            >
-                              <Text style={{ color: '#004F9F', fontWeight: 'bold', fontSize: 12 }}>+ Agregar Fila</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                          </View>
-                        </View>
-                      );
-                    })}
-
-                    <TouchableOpacity 
-                      style={[styles.button, styles.buttonPrimary, { marginTop: 20 }]}
-                      onPress={handleSaveDocument}
-                    >
-                      <Text style={styles.buttonText}>Guardar Documento</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity 
-                      style={[styles.button, { marginTop: 10, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#004F9F' }]}
-                      onPress={saveDraft}
-                    >
-                      <Text style={[styles.buttonText, { color: '#004F9F' }]}>Guardar como Borrador</Text>
-                    </TouchableOpacity>
-                  </View>
-            </View>
+            <FillFormScreen
+              selectedTemplate={selectedTemplate}
+              formData={formData}
+              setFormData={setFormData}
+              showDocumentPreview={showDocumentPreview}
+              setShowDocumentPreview={setShowDocumentPreview}
+              renderRichDescription={renderRichDescription}
+              showDatePicker={showDatePicker}
+              setShowDatePicker={setShowDatePicker}
+              parseDateString={parseDateString}
+              formatDate={formatDate}
+              handleTakePhoto={handleTakePhoto}
+              setActiveSignatureFieldId={setActiveSignatureFieldId}
+              setSignatureModalVisible={setSignatureModalVisible}
+              setActiveRichTextFieldId={setActiveRichTextFieldId}
+              setActiveRichTextLabel={setActiveRichTextLabel}
+              setTempRichTextHtml={setTempRichTextHtml}
+              setInitialRichTextHtml={setInitialRichTextHtml}
+              setRichTextModalVisible={setRichTextModalVisible}
+              handleSaveDocument={handleSaveDocument}
+              saveDraft={saveDraft}
+              onBack={() => setCurrentScreen('templates')}
+              styles={styles}
+            />
           )}
 
-              {/* Screen: Offline Docs */}
           {currentScreen === 'offline_docs' && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('dashboard')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle}>Documentos Locales</Text>
-                <TouchableOpacity onPress={loadOfflineDocs} style={{ padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8 }}>
-                  <Text style={{ fontSize: 16 }}>🔄</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ marginBottom: 15 }}>
-                <TextInput
-                  style={[styles.fieldInput, { backgroundColor: '#F9FAFB', marginBottom: 0 }]}
-                  placeholder="Buscar documento local..."
-                  value={offlineSearchTerm}
-                  onChangeText={(t) => {
-                    setOfflineSearchTerm(t);
-                    setOfflinePage(1);
-                  }}
-                />
-              </View>
-
-              {paginatedOffline.length === 0 ? (
-                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No hay documentos locales encontrados.</Text>
-              ) : (
-                <View>
-                  {paginatedOffline.map(doc => (
-                    <View key={doc.id} style={styles.offlineDocItem}>
-                      <View>
-                        <Text style={styles.offlineDocName}>{doc.template?.name || 'Documento sin nombre'}</Text>
-                        <Text style={styles.offlineDocMeta}>Fecha: {new Date(doc.createdAt).toLocaleDateString()} | Operario: {doc.operator}</Text>
-                      </View>
-                      <Text style={styles.docPendingText}>{doc.status || '⏳ Guardado Local'}</Text>
-                    </View>
-                  ))}
-                  
-                  {/* Paginación */}
-                  {totalOfflinePages > 1 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, paddingHorizontal: 10 }}>
-                      <TouchableOpacity onPress={() => setOfflinePage(p => Math.max(1, p - 1))} disabled={offlinePage === 1} style={{ padding: 10, opacity: offlinePage === 1 ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Anterior</Text>
-                      </TouchableOpacity>
-                      <Text style={{ color: '#4B5563' }}>{offlinePage} / {totalOfflinePages}</Text>
-                      <TouchableOpacity onPress={() => setOfflinePage(p => Math.min(totalOfflinePages, p + 1))} disabled={offlinePage === totalOfflinePages} style={{ padding: 10, opacity: offlinePage === totalOfflinePages ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Siguiente</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              <TouchableOpacity 
-                style={[styles.syncButton, !isOnline && styles.buttonDisabled, { marginTop: 15 }]}
-                disabled={!isOnline}
-                onPress={syncOfflineDocs}
-              >
-                <Text style={styles.syncButtonText}>
-                  {isOnline ? '🔄 Sincronizar Cambios Ahora' : '🚫 Conéctate a Internet para Sincronizar'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <OfflineDocsScreen
+              paginatedOffline={paginatedOffline}
+              offlineSearchTerm={offlineSearchTerm}
+              setOfflineSearchTerm={setOfflineSearchTerm}
+              offlinePage={offlinePage}
+              setOfflinePage={setOfflinePage}
+              totalOfflinePages={totalOfflinePages}
+              isOnline={isOnline}
+              loadOfflineDocs={loadOfflineDocs}
+              syncOfflineDocs={syncOfflineDocs}
+              onBack={() => setCurrentScreen('dashboard')}
+              styles={styles}
+            />
           )}
 
-          {/* Screen: Drafts */}
           {currentScreen === 'drafts' && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('dashboard')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle}>Borradores</Text>
-                <TouchableOpacity onPress={loadDrafts} style={{ padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8 }}>
-                  <Text style={{ fontSize: 16 }}>🔄</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ marginBottom: 15 }}>
-                <TextInput
-                  style={[styles.fieldInput, { backgroundColor: '#F9FAFB', marginBottom: 0 }]}
-                  placeholder="Buscar borrador..."
-                  value={draftSearchTerm}
-                  onChangeText={(t) => {
-                    setDraftSearchTerm(t);
-                    setDraftPage(1);
-                  }}
-                />
-              </View>
-
-              {paginatedDrafts.length === 0 ? (
-                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No tienes borradores encontrados.</Text>
-              ) : (
-                <View>
-                  {paginatedDrafts.map((draft: any) => (
-                    <View key={draft.id} style={styles.templateCard}>
-                      <Text style={styles.templateCardTitle}>{draft.template?.name || 'Documento sin nombre'}</Text>
-                      <Text style={styles.templateCardDesc}>Guardado: {new Date(draft.savedAt).toLocaleString()}</Text>
-                      <Text style={styles.templateCardDesc}>Campos llenos: {Object.keys(draft.data || {}).length}</Text>
-                      
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-                        <TouchableOpacity 
-                          style={[styles.fillBtn, { backgroundColor: '#F59E0B', flex: 1, marginRight: 8 }]} 
-                          onPress={() => {
-                            setSelectedTemplate(draft.template);
-                            setFormData(draft.data || {});
-                            setActiveDraftId(draft.id);
-                            setCurrentScreen('fill_form');
-                          }}
-                        >
-                          <Text style={styles.fillBtnText}>Completar</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={[styles.fillBtn, { backgroundColor: '#EF4444', flex: 1, marginLeft: 8 }]} 
-                          onPress={() => {
-                            Alert.alert(
-                              'Descartar',
-                              '¿Seguro que deseas eliminar este borrador permanentemente?',
-                              [
-                                { text: 'Cancelar', style: 'cancel' },
-                                { text: 'Eliminar', style: 'destructive', onPress: () => deleteDraft(draft.id) }
-                              ]
-                            );
-                          }}
-                        >
-                          <Text style={styles.fillBtnText}>Descartar</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-                  
-                  {/* Paginación */}
-                  {totalDraftPages > 1 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, paddingHorizontal: 10 }}>
-                      <TouchableOpacity onPress={() => setDraftPage(p => Math.max(1, p - 1))} disabled={draftPage === 1} style={{ padding: 10, opacity: draftPage === 1 ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Anterior</Text>
-                      </TouchableOpacity>
-                      <Text style={{ color: '#4B5563' }}>{draftPage} / {totalDraftPages}</Text>
-                      <TouchableOpacity onPress={() => setDraftPage(p => Math.min(totalDraftPages, p + 1))} disabled={draftPage === totalDraftPages} style={{ padding: 10, opacity: draftPage === totalDraftPages ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Siguiente</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
+            <DraftsScreen
+              paginatedDrafts={paginatedDrafts}
+              draftSearchTerm={draftSearchTerm}
+              setDraftSearchTerm={setDraftSearchTerm}
+              draftPage={draftPage}
+              setDraftPage={setDraftPage}
+              totalDraftPages={totalDraftPages}
+              loadDrafts={loadDrafts}
+              onSelectDraft={(draft) => {
+                setSelectedTemplate(draft.template);
+                setFormData(draft.data || {});
+                setActiveDraftId(draft.id);
+                setCurrentScreen('fill_form');
+              }}
+              onDeleteDraft={deleteDraft}
+              onBack={() => setCurrentScreen('dashboard')}
+              styles={styles}
+            />
           )}
 
-          {/* Screen: History */}
-          {currentScreen === 'history' && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('dashboard')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle}>Histórico</Text>
-                <TouchableOpacity onPress={fetchHistory} style={{ padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8 }}>
-                  <Text style={{ fontSize: 16 }}>🔄</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ marginBottom: 15 }}>
-                <TextInput
-                  style={[styles.fieldInput, { backgroundColor: '#F9FAFB', marginBottom: 0 }]}
-                  placeholder="Buscar histórico..."
-                  value={historySearchTerm}
-                  onChangeText={(t) => {
-                    setHistorySearchTerm(t);
-                    setHistoryPage(1);
-                  }}
-                />
-              </View>
-
-              {loadingHistory ? (
-                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
-              ) : paginatedHistory.length === 0 ? (
-                <Text style={{ textAlign: 'center', marginTop: 20, color: '#6B7280' }}>No tienes documentos encontrados.</Text>
-              ) : (
-                <View>
-                  {paginatedHistory.map((doc: any) => (
-                    <View key={doc.id} style={styles.templateCard}>
-                      <Text style={styles.templateCardTitle}>{doc.template?.name || 'Documento sin nombre'}</Text>
-                      <Text style={styles.templateCardDesc}>Fecha: {new Date(doc.createdAt).toLocaleDateString()}</Text>
-                      <Text style={styles.templateCardDesc}>Estado: {doc.syncStatus}</Text>
-                      <TouchableOpacity 
-                        style={[styles.fillBtn, { backgroundColor: colors.accent }]} 
-                        onPress={() => {
-                          setSelectedDocument(doc);
-                          setCurrentScreen('view_document');
-                        }}
-                      >
-                        <Text style={styles.fillBtnText}>Ver Contenido</Text>
-                      </TouchableOpacity>
-                      {doc.filePath && (
-                        <TouchableOpacity 
-                          style={[styles.fillBtn, { backgroundColor: '#10B981', marginTop: 10 }]} 
-                          onPress={() => {
-                            const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
-                            const baseUrl = API_URL.replace('/api', '');
-                            const url = `${baseUrl}/uploads/${doc.filePath}`;
-                            Linking.openURL(url).catch(() => {
-                              Alert.alert('Error', 'No se pudo abrir el PDF');
-                            });
-                          }}
-                        >
-                          <Text style={styles.fillBtnText}>Descargar PDF</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))}
-                  
-                  {/* Paginación */}
-                  {totalHistoryPages > 1 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, paddingHorizontal: 10 }}>
-                      <TouchableOpacity onPress={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1} style={{ padding: 10, opacity: historyPage === 1 ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Anterior</Text>
-                      </TouchableOpacity>
-                      <Text style={{ color: '#4B5563' }}>{historyPage} / {totalHistoryPages}</Text>
-                      <TouchableOpacity onPress={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))} disabled={historyPage === totalHistoryPages} style={{ padding: 10, opacity: historyPage === totalHistoryPages ? 0.5 : 1 }}>
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Siguiente</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Screen: View Document */}
-          {currentScreen === 'view_document' && selectedDocument && (
-            <View style={styles.subView}>
-              <View style={styles.subViewHeader}>
-                <TouchableOpacity onPress={() => setCurrentScreen('history')} style={styles.backBtn}>
-                  <Text style={styles.backBtnText}>⬅️ Volver</Text>
-                </TouchableOpacity>
-                <Text style={styles.subViewTitle} numberOfLines={1}>{selectedDocument.template?.name}</Text>
-              </View>
-              <View style={[styles.formContainer, { backgroundColor: 'white', padding: 20, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }]}>
-                
-                {/* Header (Datos Empresa) */}
-                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 16, marginBottom: 16 }}>
-                  <View style={{ width: 50, height: 50, backgroundColor: '#004F9F', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 10, textAlign: 'center' }}>ESE{'\n'}Norte 3</Text>
-                  </View>
-                  <View style={{ flex: 1, justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#111827' }}>ESE Norte 3</Text>
-                    <Text style={{ fontSize: 11, color: '#6B7280' }}>NIT: 800.123.456-7 | Dir: Sede Principal</Text>
-                  </View>
-                </View>
-
-                {/* Título y Descripción con variables reemplazadas */}
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#004F9F', marginBottom: 8 }}>
-                  {selectedDocument.template?.name || 'Documento'}
-                </Text>
-                
-                {renderRichDescription(selectedDocument.template?.description, selectedDocument.data || {}, selectedDocument.template?.fields || [])}
-
-                <View style={{ height: 1, backgroundColor: '#E5E7EB', marginVertical: 16 }} />
-
-                {/* Renderizar los campos restantes que no son reemplazables fácilmente en el texto, como firmas o fotos */}
-                {Object.keys(selectedDocument.data || {}).map((key: string) => {
-                  const val = selectedDocument.data[key];
-                  
-                  // Intentar encontrar el label del campo
-                  const fieldDef = (selectedDocument.template?.fields || []).find((f: any) => f.id === key);
-                  const fieldLabel = fieldDef ? fieldDef.label : key;
-                  
-                  // Solo mostrar campos largos, firmas o fotos abajo, 
-                  // o mostrar todos en modo lectura
-                  const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
-                  
-                  return (
-                    <View key={key} style={styles.fieldGroup}>
-                      <Text style={[styles.fieldLabel, { fontSize: 12, color: '#9CA3AF' }]}>{fieldLabel}</Text>
-                      {isMedia ? (
-                        <Image source={{ uri: val }} style={{ width: '100%', height: 150, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }} resizeMode="contain" />
-                      ) : (
-                        <Text style={{ fontSize: 15, color: '#111827', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#F3F4F6' }}>
-                          {val?.toString() || 'Sin respuesta'}
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
+          {(currentScreen === 'history' || currentScreen === 'view_document') && (
+            <HistoryScreen
+              currentScreen={currentScreen}
+              loadingHistory={loadingHistory}
+              paginatedHistory={paginatedHistory}
+              historySearchTerm={historySearchTerm}
+              setHistorySearchTerm={setHistorySearchTerm}
+              historyPage={historyPage}
+              setHistoryPage={setHistoryPage}
+              totalHistoryPages={totalHistoryPages}
+              fetchHistory={fetchHistory}
+              selectedDocument={selectedDocument}
+              onSelectDocument={(doc) => {
+                setSelectedDocument(doc);
+                setCurrentScreen('view_document');
+              }}
+              renderRichDescription={renderRichDescription}
+              onBackToDashboard={() => setCurrentScreen('dashboard')}
+              onBackToHistory={() => setCurrentScreen('history')}
+              styles={styles}
+            />
           )}
         </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      <Modal visible={richTextModalVisible} animationType="slide" transparent={true} onRequestClose={() => setRichTextModalVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: '95%', height: '85%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
+            <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => {
+                setRichTextModalVisible(false);
+                setActiveRichTextFieldId(null);
+                setTempRichTextHtml('');
+                setInitialRichTextHtml('');
+              }}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{activeRichTextLabel}</Text>
+              
+              <TouchableOpacity onPress={() => {
+                if (activeRichTextFieldId) {
+                  setFormData((prev: any) => ({ ...prev, [activeRichTextFieldId]: tempRichTextHtml }));
+                }
+                setRichTextModalVisible(false);
+                setActiveRichTextFieldId(null);
+                setTempRichTextHtml('');
+                setInitialRichTextHtml('');
+              }}>
+                <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Listo</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}>
+              <WebView
+                source={{ html: getRichEditorHtml(initialRichTextHtml) }}
+                onMessage={(event) => {
+                  setTempRichTextHtml(event.nativeEvent.data);
+                }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                originWhitelist={['*']}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={signatureModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSignatureModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>

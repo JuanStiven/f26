@@ -7,6 +7,7 @@ export async function getAllEmployees(role?: string) {
     select: {
       id: true,
       name: true,
+      email: true,
       document: true,
       position: true,
       status: true,
@@ -24,6 +25,7 @@ export async function getEmployeeById(id: string) {
     select: {
       id: true,
       name: true,
+      email: true,
       document: true,
       position: true,
       status: true,
@@ -49,11 +51,19 @@ export async function createEmployee(data: {
   pin: string;
   position?: string;
   role?: string;
+  email?: string;
 }) {
   // Verificar duplicado de cédula
   const exists = await prisma.user.findUnique({ where: { document: data.document } });
   if (exists) {
     throw { status: 409, message: 'Ya existe un usuario con esa cédula.' };
+  }
+
+  if (data.email) {
+    const emailExists = await prisma.user.findUnique({ where: { email: data.email } });
+    if (emailExists) {
+      throw { status: 409, message: 'Ya existe un usuario con este correo electrónico.' };
+    }
   }
 
   const hashedPin = await bcrypt.hash(data.pin, 10);
@@ -66,10 +76,12 @@ export async function createEmployee(data: {
       role: (data.role as 'ADMIN' | 'EMPLOYEE') || 'EMPLOYEE',
       position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
       status: 'Activo',
+      email: data.email || null,
     },
     select: {
       id: true,
       name: true,
+      email: true,
       document: true,
       position: true,
       role: true,
@@ -81,17 +93,26 @@ export async function createEmployee(data: {
 
 export async function updateEmployee(
   id: string,
-  data: { name?: string; position?: string; status?: string; pin?: string }
+  data: { name?: string; position?: string; status?: string; pin?: string; role?: string; email?: string }
 ) {
   const exists = await prisma.user.findUnique({ where: { id } });
   if (!exists) {
     throw { status: 404, message: 'Empleado no encontrado.' };
   }
 
+  if (data.email && data.email !== exists.email) {
+    const emailExists = await prisma.user.findUnique({ where: { email: data.email } });
+    if (emailExists) {
+      throw { status: 409, message: 'Ya existe un usuario con este correo electrónico.' };
+    }
+  }
+
   const updateData: any = {};
   if (data.name) updateData.name = data.name;
   if (data.position) updateData.position = data.position;
   if (data.status) updateData.status = data.status;
+  if (data.role) updateData.role = data.role as 'ADMIN' | 'EMPLOYEE';
+  if (data.email !== undefined) updateData.email = data.email || null;
   if (data.pin) updateData.password = await bcrypt.hash(data.pin, 10);
 
   return prisma.user.update({
@@ -100,6 +121,7 @@ export async function updateEmployee(
     select: {
       id: true,
       name: true,
+      email: true,
       document: true,
       position: true,
       role: true,

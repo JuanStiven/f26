@@ -63,10 +63,8 @@ app.listen(PORT, async () => {
     console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
     console.log(`📡 Health check: http://localhost:${PORT}/health`);
     console.log(`📁 Uploads: ${uploadsDir}\n`);
-    // Ejecutar seed en desarrollo
-    if (process.env.NODE_ENV === 'development') {
-        await (0, seed_service_1.seedDatabase)();
-    }
+    // Ejecutar seed si la base de datos está vacía
+    await (0, seed_service_1.seedDatabase)();
 });
 exports.default = app;
 //# sourceMappingURL=index.js.map

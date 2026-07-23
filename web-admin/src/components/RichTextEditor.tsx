@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -78,8 +78,13 @@ interface RichTextEditorProps {
   onInsertVariable?: (label: string) => void;
 }
 
-export function RichTextEditor({ value, onChange, placeholder, className, fieldLabels = [] }: RichTextEditorProps) {
-  const editor = useEditor({
+export interface RichTextEditorRef {
+  insertVariable: (label: string) => void;
+}
+
+export const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(
+  ({ value, onChange, placeholder, className, fieldLabels = [] }, ref) => {
+    const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
@@ -109,6 +114,14 @@ export function RichTextEditor({ value, onChange, placeholder, className, fieldL
       onChange(editor.getHTML());
     },
   });
+
+  useImperativeHandle(ref, () => ({
+    insertVariable: (label: string) => {
+      if (editor) {
+        editor.chain().focus().insertContent(`{{${label}}} `).run();
+      }
+    }
+  }));
 
   // Sync external value changes
   useEffect(() => {
@@ -496,4 +509,4 @@ export function RichTextEditor({ value, onChange, placeholder, className, fieldL
       <EditorContent editor={editor} />
     </div>
   );
-}
+});

@@ -91,6 +91,7 @@ model Template {
   name              String
   description       String @default("") // HTML body content (rich text)
   descriptionStyles String @default("") // CSS styles for the HTML body
+  footer            String @default("") // HTML footer content (rich text)
   storagePath       String @default("") // Ruta en el servidor: "CALIDAD/AUDITORIAS"
   fields            Json   // Array de campos JSON [{id, type, label, required, columns?}]
 
@@ -98,6 +99,12 @@ model Template {
   qualityCode       String?
   qualityVersion    String?
   qualityDate       String?
+  isCreativeMode    Boolean @default(false)
+  creativeElements  Json    @default("[]")
+
+  isDocxTemplate    Boolean @default(false)
+  docxFilePath      String?
+  docxOriginalName  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -50,11 +50,17 @@ export declare function getDocumentById(id: string): Promise<{
         updatedAt: Date;
         description: string;
         descriptionStyles: string;
+        footer: string;
         storagePath: string;
         isQualityDocument: boolean;
         qualityCode: string | null;
         qualityVersion: string | null;
         qualityDate: string | null;
+        isCreativeMode: boolean;
+        creativeElements: import("@prisma/client/runtime/client").JsonValue;
+        isDocxTemplate: boolean;
+        docxFilePath: string | null;
+        docxOriginalName: string | null;
     };
     templateSnapshot: undefined;
     filledBy: {

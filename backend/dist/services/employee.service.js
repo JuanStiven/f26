@@ -16,6 +16,7 @@ async function getAllEmployees(role) {
         select: {
             id: true,
             name: true,
+            email: true,
             document: true,
             position: true,
             status: true,
@@ -32,6 +33,7 @@ async function getEmployeeById(id) {
         select: {
             id: true,
             name: true,
+            email: true,
             document: true,
             position: true,
             status: true,
@@ -54,6 +56,12 @@ async function createEmployee(data) {
     if (exists) {
         throw { status: 409, message: 'Ya existe un usuario con esa cédula.' };
     }
+    if (data.email) {
+        const emailExists = await prisma_1.default.user.findUnique({ where: { email: data.email } });
+        if (emailExists) {
+            throw { status: 409, message: 'Ya existe un usuario con este correo electrónico.' };
+        }
+    }
     const hashedPin = await bcryptjs_1.default.hash(data.pin, 10);
     return prisma_1.default.user.create({
         data: {
@@ -63,10 +71,12 @@ async function createEmployee(data) {
             role: data.role || 'EMPLOYEE',
             position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
             status: 'Activo',
+            email: data.email || null,
         },
         select: {
             id: true,
             name: true,
+            email: true,
             document: true,
             position: true,
             role: true,
@@ -80,6 +90,12 @@ async function updateEmployee(id, data) {
     if (!exists) {
         throw { status: 404, message: 'Empleado no encontrado.' };
     }
+    if (data.email && data.email !== exists.email) {
+        const emailExists = await prisma_1.default.user.findUnique({ where: { email: data.email } });
+        if (emailExists) {
+            throw { status: 409, message: 'Ya existe un usuario con este correo electrónico.' };
+        }
+    }
     const updateData = {};
     if (data.name)
         updateData.name = data.name;
@@ -87,6 +103,10 @@ async function updateEmployee(id, data) {
         updateData.position = data.position;
     if (data.status)
         updateData.status = data.status;
+    if (data.role)
+        updateData.role = data.role;
+    if (data.email !== undefined)
+        updateData.email = data.email || null;
     if (data.pin)
         updateData.password = await bcryptjs_1.default.hash(data.pin, 10);
     return prisma_1.default.user.update({
@@ -95,6 +115,7 @@ async function updateEmployee(id, data) {
         select: {
             id: true,
             name: true,
+            email: true,
             document: true,
             position: true,
             role: true,
