@@ -33,6 +33,38 @@ export async function parseDocxTemplate(filePath: string) {
   };
 }
 
+const ImageModule = require('docxtemplater-image-module-free');
+
+function cleanHtmlText(html: string): string {
+  if (!html || typeof html !== 'string') return '';
+  if (!/<[a-z][\s\S]*>/i.test(html)) return html;
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/\n\s*\n/g, '\n')
+    .trim();
+}
+
+function formatTableAsText(rows: any[], columns?: string[]): string {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  return rows.map((row, idx) => {
+    if (typeof row === 'object' && row !== null) {
+      const keys = columns && columns.length > 0 ? columns : Object.keys(row);
+      const rowStr = keys.map(k => `${k}: ${row[k] ?? ''}`).join(' | ');
+      return `${idx + 1}. ${rowStr}`;
+    }
+    return `${idx + 1}. ${String(row)}`;
+  }).join('\n');
+}
+
 export function generateDocxFromTemplate(
   templatePath: string,
   formData: Record<string, any>,
@@ -60,7 +92,34 @@ export function generateDocxFromTemplate(
     console.warn('Advertencia al normalizar delimitadores XML en DOCX:', e);
   }
 
+  const imageOptions = {
+    centered: false,
+    fileType: 'docx',
+    prefix: '',
+    getImage: (tagValue: any) => {
+      if (!tagValue || typeof tagValue !== 'string') return null;
+      if (tagValue.startsWith('data:image/')) {
+        const base64Data = tagValue.replace(/^data:image\/\w+;base64,/, '');
+        return Buffer.from(base64Data, 'base64');
+      }
+      if (fs.existsSync(tagValue)) {
+        try {
+          return fs.readFileSync(tagValue);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    },
+    getSize: (_img: any, _tagValue: any, _tagName: string) => {
+      return [180, 70];
+    },
+  };
+
+  const imageModule = new ImageModule(imageOptions);
+
   const doc = new Docxtemplater(zip, {
+    modules: [imageModule],
     paragraphLoop: true,
     linebreaks: true,
     delimiters: { start: '{{', end: '}}' },
@@ -73,16 +132,41 @@ export function generateDocxFromTemplate(
   fields.forEach(field => {
     let val = formData[field.id];
     if (val === undefined || val === null) {
-      val = formData[field.label] || '';
+      val = formData[field.label] || formData[field.tag] || '';
     }
 
-    if (field.type === 'select' && field.options) {
+    // Dropdown / Select handling
+    if ((field.type === 'select' || field.type === 'dropdown') && Array.isArray(field.options)) {
       const option = field.options.find(
-        (o: any) => String(o.id) === String(val) || String(o.value) === String(val)
+        (o: any) =>
+          String(o.id || o.value || o) === String(val) ||
+          String(o.label || o) === String(val)
       );
       if (option) {
-        val = option.label || option.value;
+        val = typeof option === 'string' ? option : (option.label || option.value || option.id);
       }
+    }
+
+    // RichText / Textarea cleaning
+    if ((field.type === 'textarea' || field.type === 'richtext') && typeof val === 'string') {
+      val = cleanHtmlText(val);
+    }
+
+    // Signature / Photo / Image base64 formatting
+    if ((field.type === 'signature' || field.type === 'photo' || field.type === 'image') && typeof val === 'string' && val.length > 50) {
+      if (!val.startsWith('data:image/') && !fs.existsSync(val)) {
+        val = `data:image/png;base64,${val}`;
+      }
+    }
+
+    // Table array handling: format text representation for simple tag replacement
+    if ((field.type === 'table' || field.type === 'table_contents') && Array.isArray(val)) {
+      const formattedText = formatTableAsText(val, field.columns);
+      if (field.tag) {
+        const cleanTag = String(field.tag).replace(/[{}]/g, '').trim();
+        data[cleanTag + '_text'] = formattedText;
+      }
+      data[field.id + '_text'] = formattedText;
     }
 
     if (val === undefined || val === null) {
@@ -105,13 +189,19 @@ export function generateDocxFromTemplate(
   // 2. Add all raw formData keys into data
   Object.entries(formData).forEach(([k, v]) => {
     let finalVal = v;
-    if (typeof v === 'string' && v.startsWith('data:image/')) {
-      // Signature / Image placeholder representation
-      finalVal = '[Firma / Imagen Registrada]';
-    } else if (Array.isArray(v)) {
-      finalVal = JSON.stringify(v);
+    if (typeof v === 'string' && (v.includes('<p>') || v.includes('<br>') || v.includes('<div>'))) {
+      finalVal = cleanHtmlText(v);
+    } else if (typeof v === 'string' && v.length > 50 && (v.startsWith('data:image/') || v.startsWith('/'))) {
+      finalVal = v;
     }
-    data[k] = finalVal ?? '';
+    if (data[k] === undefined || data[k] === '') {
+      data[k] = finalVal ?? '';
+    }
+    // Also assign clean tag without braces
+    const cleanKey = k.replace(/[{}]/g, '').trim();
+    if (data[cleanKey] === undefined || data[cleanKey] === '') {
+      data[cleanKey] = finalVal ?? '';
+    }
   });
 
   // Render document with data

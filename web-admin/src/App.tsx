@@ -257,6 +257,15 @@ export default function App() {
         } catch (e) {}
       }
     }
+
+    const handleUnauthorized = (e: any) => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      alert(e.detail?.message || 'Tu sesión ha expirado o el token es inválido. Por favor inicia sesión de nuevo.');
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   useEffect(() => {

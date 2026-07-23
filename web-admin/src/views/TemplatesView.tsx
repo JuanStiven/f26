@@ -345,7 +345,9 @@ export function TemplatesView({
       formData.append('docxFile', file);
       const { default: api } = await import('../utils/api');
       const res = await api.post('/templates/upload-docx', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
       const responseData = res.data.data || res.data;
       setDocxFilePath(responseData.docxFilePath || responseData.filePath || '');
