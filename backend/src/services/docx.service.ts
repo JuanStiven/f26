@@ -102,11 +102,20 @@ export function generateDocxFromTemplate(
         const base64Data = tagValue.replace(/^data:image\/\w+;base64,/, '');
         return Buffer.from(base64Data, 'base64');
       }
-      if (fs.existsSync(tagValue)) {
-        try {
-          return fs.readFileSync(tagValue);
-        } catch {
-          return null;
+      const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+      const cleanPath = tagValue.replace(/^\/?uploads\//, '');
+      const candidatePaths = [
+        path.isAbsolute(tagValue) ? tagValue : path.join(uploadsDir, cleanPath),
+        path.join(uploadsDir, tagValue),
+        tagValue,
+      ];
+      for (const p of candidatePaths) {
+        if (fs.existsSync(p)) {
+          try {
+            return fs.readFileSync(p);
+          } catch {
+            // continue
+          }
         }
       }
       return null;

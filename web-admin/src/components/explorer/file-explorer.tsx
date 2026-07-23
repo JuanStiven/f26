@@ -1197,17 +1197,24 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                     const escapedLabel = fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                     const regex = new RegExp(`{{\\s*(?:${escapedTagName}|${escapedLabel})\\s*}}`, 'gi');
                     const value = data[key];
-                    if (typeof value === 'string' && value.startsWith('data:image/')) {
+                    const isImgVal = typeof value === 'string' && (
+                      value.startsWith('data:image/') ||
+                      value.startsWith('file://') ||
+                      value.startsWith('/uploads/') ||
+                      value.includes('/uploads/') ||
+                      /\.(png|jpe?g|gif|webp)$/i.test(value)
+                    );
+                    if (isImgVal) {
                        const placeholder = `__IMAGE_BLOCK_${key}__`;
                        if (regex.test(formattedDescription)) {
-                         formattedDescription = formattedDescription.replace(regex, placeholder);
-                         blockTokens.push({ placeholder, type: 'image', value });
+                          formattedDescription = formattedDescription.replace(regex, placeholder);
+                          blockTokens.push({ placeholder, type: 'image', value });
                        }
                     } else if (Array.isArray(value)) {
                        const placeholder = `__TABLE_BLOCK_${key}__`;
                        if (regex.test(formattedDescription)) {
-                         formattedDescription = formattedDescription.replace(regex, placeholder);
-                         blockTokens.push({ placeholder, type: 'table', value });
+                          formattedDescription = formattedDescription.replace(regex, placeholder);
+                          blockTokens.push({ placeholder, type: 'table', value });
                        }
                     } else {
                        formattedDescription = formattedDescription.replace(regex, String(value));
@@ -1276,7 +1283,13 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                   const fieldDef = (contentModalNode.rawDoc.template?.fields || []).find((f: any) => f.id === key);
                   const fieldLabel = fieldDef ? fieldDef.label : key;
                   
-                  const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
+                  const isMedia = typeof val === 'string' && (
+                    val.startsWith('file://') ||
+                    val.startsWith('data:image/') ||
+                    val.startsWith('/uploads/') ||
+                    val.includes('/uploads/') ||
+                    /\.(png|jpe?g|gif|webp)$/i.test(val)
+                  );
 
                   return (
                     <div key={key} className="space-y-1">

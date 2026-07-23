@@ -14,6 +14,60 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
 const docx_service_1 = require("./docx.service");
+const company_service_1 = require("./company.service");
+function processFormDataBase64(formData, storageSubfolder) {
+    if (!formData || typeof formData !== 'object')
+        return formData;
+    if (Array.isArray(formData)) {
+        return formData.map(item => processFormDataBase64(item, storageSubfolder));
+    }
+    const result = { ...formData };
+    for (const key of Object.keys(result)) {
+        const val = result[key];
+        if (typeof val === 'string' && val.startsWith('data:image/')) {
+            const isSig = key.toLowerCase().includes('signature') || key.toLowerCase().includes('firma');
+            const prefix = isSig ? 'sig' : 'img';
+            const subfolder = isSig ? path_1.default.join(storageSubfolder, 'signatures') : path_1.default.join(storageSubfolder, 'images');
+            result[key] = (0, company_service_1.saveBase64ToFile)(val, subfolder, prefix);
+        }
+        else if (typeof val === 'object' && val !== null) {
+            result[key] = processFormDataBase64(val, storageSubfolder);
+        }
+    }
+    return result;
+}
+function getBufferFromImageSource(val, uploadsDir) {
+    if (!val || typeof val !== 'string')
+        return null;
+    if (val.startsWith('data:image/')) {
+        const base64Data = val.replace(/^data:image\/\w+;base64,/, '');
+        return Buffer.from(base64Data, 'base64');
+    }
+    const cleanPath = val.replace(/^\/?uploads\//, '');
+    const candidatePaths = [
+        path_1.default.isAbsolute(val) ? val : path_1.default.join(uploadsDir, cleanPath),
+        path_1.default.join(uploadsDir, val),
+        val,
+    ];
+    for (const p of candidatePaths) {
+        if (fs_1.default.existsSync(p)) {
+            try {
+                return fs_1.default.readFileSync(p);
+            }
+            catch {
+                // ignore
+            }
+        }
+    }
+    return null;
+}
+function getFieldTagName(field, allFields) {
+    const hasDuplicate = allFields.some((f) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase());
+    if (hasDuplicate) {
+        return `${field.category || 'General'}: ${field.label}`;
+    }
+    return field.label;
+}
 async function getAllDocuments() {
     const docs = await prisma_1.default.signedDocument.findMany({
         orderBy: { createdAt: 'desc' },
@@ -59,13 +113,6 @@ async function getDocumentById(id) {
         templateSnapshot: undefined
     };
 }
-function getFieldTagName(field, allFields) {
-    const hasDuplicate = allFields.some((f) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase());
-    if (hasDuplicate) {
-        return `${field.category || 'General'}: ${field.label}`;
-    }
-    return field.label;
-}
 async function createDocument(data) {
     // Verificar que la plantilla existe
     const template = await prisma_1.default.template.findUnique({ where: { id: data.templateId } });
@@ -85,6 +132,14 @@ async function createDocument(data) {
     if (!fs_1.default.existsSync(folderPath)) {
         fs_1.default.mkdirSync(folderPath, { recursive: true });
     }
+    // Convertir imágenes/firmas base64 a archivos físicos en el servidor
+    if (data.photoUrl && data.photoUrl.startsWith('data:image/')) {
+        data.photoUrl = (0, company_service_1.saveBase64ToFile)(data.photoUrl, path_1.default.join(storagePath, 'photos'), 'photo');
+    }
+    if (data.signatureUrl && data.signatureUrl.startsWith('data:image/')) {
+        data.signatureUrl = (0, company_service_1.saveBase64ToFile)(data.signatureUrl, path_1.default.join(storagePath, 'signatures'), 'sig');
+    }
+    data.formData = processFormDataBase64(data.formData, storagePath);
     // Nombre del archivo: Template_Empleado_Timestamp
     const sanitizedName = template.name.replace(/\s+/g, '_');
     const sanitizedUser = user.name.replace(/\s+/g, '_');
@@ -107,7 +162,19 @@ async function createDocument(data) {
     if (template.isDocxTemplate && template.docxFilePath) {
         const docxFileName = `${baseFileName}.docx`;
         const fullDocxPath = path_1.default.join(folderPath, docxFileName);
-        const docxTemplatePath = path_1.default.join(uploadsDir, template.docxFilePath);
+        let docxTemplatePath = path_1.default.join(uploadsDir, template.docxFilePath);
+        if (!fs_1.default.existsSync(docxTemplatePath)) {
+            const fileNameOnly = path_1.default.basename(template.docxFilePath);
+            const candidatePaths = [
+                path_1.default.join(uploadsDir, 'templates', 'docx', fileNameOnly),
+                path_1.default.join(uploadsDir, 'templates', fileNameOnly),
+                path_1.default.join(uploadsDir, fileNameOnly),
+            ];
+            const foundPath = candidatePaths.find(p => fs_1.default.existsSync(p));
+            if (foundPath) {
+                docxTemplatePath = foundPath;
+            }
+        }
         const docxBuffer = (0, docx_service_1.generateDocxFromTemplate)(docxTemplatePath, {
             ...data.formData,
             diligenciado_por: user.name,
@@ -180,12 +247,13 @@ async function createDocument(data) {
         // 6. Columna 1: Logo
         if (companySettings?.logoUrl) {
             try {
-                const base64Data = companySettings.logoUrl.replace(/^data:image\/\w+;base64,/, "");
-                const logoBuffer = Buffer.from(base64Data, 'base64');
-                const logoW = companySettings.pdfLogoWidth || 110;
-                const logoH = companySettings.pdfLogoHeight || 50;
-                const logoTop = tableTop + (tableHeight - logoH) / 2;
-                docInstance.image(logoBuffer, pdfMargin + (col1Width - logoW) / 2, logoTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                const logoBuffer = getBufferFromImageSource(companySettings.logoUrl, uploadsDir);
+                if (logoBuffer) {
+                    const logoW = companySettings.pdfLogoWidth || 110;
+                    const logoH = companySettings.pdfLogoHeight || 50;
+                    const logoTop = tableTop + (tableHeight - logoH) / 2;
+                    docInstance.image(logoBuffer, pdfMargin + (col1Width - logoW) / 2, logoTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                }
             }
             catch (e) {
                 console.error('Error adding logo to PDF:', e);
@@ -218,11 +286,12 @@ async function createDocument(data) {
         // FORMATO LIBRE (Clásico)
         if (companySettings?.logoUrl) {
             try {
-                const base64Data = companySettings.logoUrl.replace(/^data:image\/\w+;base64,/, "");
-                const logoBuffer = Buffer.from(base64Data, 'base64');
-                const logoW = companySettings.pdfLogoWidth || 100;
-                const logoH = companySettings.pdfLogoHeight || 100;
-                doc.image(logoBuffer, pdfMargin, headerTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                const logoBuffer = getBufferFromImageSource(companySettings.logoUrl, uploadsDir);
+                if (logoBuffer) {
+                    const logoW = companySettings.pdfLogoWidth || 100;
+                    const logoH = companySettings.pdfLogoHeight || 100;
+                    doc.image(logoBuffer, pdfMargin, headerTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                }
             }
             catch (e) {
                 console.error('Error adding logo to PDF:', e);
@@ -285,7 +354,11 @@ async function createDocument(data) {
             const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const escapedLabel = fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp(`{{\\s*(?:${escapedTagName}|${escapedLabel})\\s*}}`, 'gi');
-            if (typeof value === 'string' && value.startsWith('data:image/')) {
+            const isImgVal = typeof value === 'string' && (value.startsWith('data:image/') ||
+                value.startsWith('/uploads/') ||
+                value.includes('/uploads/') ||
+                /\.(png|jpe?g|gif|webp)$/i.test(value));
+            if (isImgVal) {
                 const placeholder = `__IMAGE_BLOCK_${key}__`;
                 if (regex.test(formattedDescription)) {
                     formattedDescription = formattedDescription.replace(regex, placeholder);
@@ -377,12 +450,16 @@ async function createDocument(data) {
                             if (idx < parts.length - 1) {
                                 if (bt.type === 'image') {
                                     try {
-                                        const base64Data = bt.value.replace(/^data:image\/\w+;base64,/, "");
-                                        const imgBuffer = Buffer.from(base64Data, 'base64');
-                                        checkPageBreak(160);
-                                        doc.moveDown(0.5);
-                                        doc.image(imgBuffer, { width: 150 });
-                                        doc.moveDown(0.5);
+                                        const imgBuffer = getBufferFromImageSource(bt.value, uploadsDir);
+                                        if (imgBuffer) {
+                                            checkPageBreak(160);
+                                            doc.moveDown(0.5);
+                                            doc.image(imgBuffer, { width: 150 });
+                                            doc.moveDown(0.5);
+                                        }
+                                        else {
+                                            doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Imagen no encontrada]`, { lineGap: 3 });
+                                        }
                                     }
                                     catch (e) {
                                         doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Error cargando imagen]`, { lineGap: 3 });
@@ -679,14 +756,21 @@ async function createDocument(data) {
             doc.moveDown(0.5);
             catFields.forEach(field => {
                 doc.fillColor('#000000').fontSize(paragraphFontSize).font('Helvetica-Bold').text(`${field.label}:`, { lineGap: 3 });
-                if (typeof field.value === 'string' && field.value.startsWith('data:image/')) {
+                const isImageField = typeof field.value === 'string' && (field.value.startsWith('data:image/') ||
+                    field.value.startsWith('/uploads/') ||
+                    field.value.includes('/uploads/') ||
+                    /\.(png|jpe?g|gif|webp)$/i.test(field.value));
+                if (isImageField) {
                     try {
-                        const base64Data = field.value.replace(/^data:image\/\w+;base64,/, "");
-                        const imgBuffer = Buffer.from(base64Data, 'base64');
-                        checkPageBreak(160);
-                        doc.moveDown(0.5);
-                        // Mostrar fotos pequeñas y firmas legibles
-                        doc.image(imgBuffer, { width: 150 });
+                        const imgBuffer = getBufferFromImageSource(field.value, uploadsDir);
+                        if (imgBuffer) {
+                            checkPageBreak(160);
+                            doc.moveDown(0.5);
+                            doc.image(imgBuffer, { width: 150 });
+                        }
+                        else {
+                            doc.font('Helvetica').text(`[Imagen no encontrada]`, { lineGap: 3 });
+                        }
                     }
                     catch (e) {
                         doc.font('Helvetica').text(`[Error cargando imagen]`, { lineGap: 3 });

@@ -2,6 +2,17 @@ import React from 'react';
 import { View, Text, TouchableOpacity, TextInput, ActivityIndicator, Image, Linking, Alert } from 'react-native';
 import { colors } from '../theme/colors';
 
+const getImageUri = (uri: string) => {
+  if (!uri || typeof uri !== 'string') return uri;
+  if (uri.startsWith('data:image/') || uri.startsWith('file://') || uri.startsWith('http://') || uri.startsWith('https://')) {
+    return uri;
+  }
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+  const baseUrl = API_URL.replace('/api', '');
+  const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
 interface HistoryScreenProps {
   currentScreen: 'history' | 'view_document';
   loadingHistory: boolean;
@@ -76,13 +87,19 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             const fieldDef = (selectedDocument.template?.fields || []).find((f: any) => f.id === key);
             const fieldLabel = fieldDef ? fieldDef.label : key;
             
-            const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
+            const isMedia = typeof val === 'string' && (
+              val.startsWith('file://') ||
+              val.startsWith('data:image/') ||
+              val.startsWith('/uploads/') ||
+              val.includes('/uploads/') ||
+              /\.(png|jpe?g|gif|webp)$/i.test(val)
+            );
             
             return (
               <View key={key} style={styles.fieldGroup}>
                 <Text style={[styles.fieldLabel, { fontSize: 12, color: '#9CA3AF' }]}>{fieldLabel}</Text>
                 {isMedia ? (
-                  <Image source={{ uri: val }} style={{ width: '100%', height: 150, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }} resizeMode="contain" />
+                  <Image source={{ uri: getImageUri(val) }} style={{ width: '100%', height: 150, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }} resizeMode="contain" />
                 ) : (
                   <Text style={{ fontSize: 15, color: '#111827', backgroundColor: '#F9FAFB', padding: 10, borderRadius: 6, borderWidth: 1, borderColor: '#F3F4F6' }}>
                     {val?.toString() || 'Sin respuesta'}

@@ -24,7 +24,14 @@ export function TemplatePreview({ body, styles, footer, className, data }: Templ
       const trimmedLabel = label.trim();
       if (data[trimmedLabel] !== undefined) {
         const value = data[trimmedLabel];
-        if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+        const isImg = typeof value === 'string' && (
+          value.startsWith('data:image/') ||
+          value.startsWith('file://') ||
+          value.startsWith('/uploads/') ||
+          value.includes('/uploads/') ||
+          /\.(png|jpe?g|gif|webp)$/i.test(value)
+        );
+        if (isImg) {
           return `<img src="${value}" alt="${trimmedLabel}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #e5e7eb;margin:8px 0;" />`;
         }
         if (typeof value === 'string' && (value.startsWith('<') || value.includes('</') || value.includes('<br'))) {

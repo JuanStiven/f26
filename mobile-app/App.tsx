@@ -28,6 +28,17 @@ import { OfflineDocsScreen } from './src/screens/OfflineDocsScreen';
 import { DraftsScreen } from './src/screens/DraftsScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
 
+const getImageUri = (uri: string) => {
+  if (!uri || typeof uri !== 'string') return uri;
+  if (uri.startsWith('data:image/') || uri.startsWith('file://') || uri.startsWith('http://') || uri.startsWith('https://')) {
+    return uri;
+  }
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+  const baseUrl = API_URL.replace('/api', '');
+  const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
 // Datos de simulación para los empleados de la ESE Norte 3
 const EMPLOYEES_DB = [
   { id: '1', name: 'Carlos Mario Torres', doc: '1098765432', pin: '1234', role: 'Operario de Campo', status: 'Activo' },
@@ -582,7 +593,14 @@ export default function App() {
       const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(?:{{\\s*${escapedLabel}\\s*}}|{\\s*${escapedLabel}\\s*}|<<\\s*${escapedLabel}\\s*>>)`, 'gi');
       
-      if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+      const isImgVal = typeof value === 'string' && (
+        value.startsWith('data:image/') ||
+        value.startsWith('file://') ||
+        value.startsWith('/uploads/') ||
+        value.includes('/uploads/') ||
+        /\.(png|jpe?g|gif|webp)$/i.test(value)
+      );
+      if (isImgVal) {
         const placeholder = `__IMG_${label.replace(/\s+/g, '_')}__`;
         processed = processed.replace(regex, placeholder);
         blockTokens.push({ placeholder, type: 'image', value });
@@ -626,7 +644,7 @@ export default function App() {
                 elements.push(
                   <Image
                     key={`${baseKey}-img-${idx}`}
-                    source={{ uri: bt.value }}
+                    source={{ uri: getImageUri(bt.value) }}
                     style={{ width: '100%', height: 150, resizeMode: 'contain', marginVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}
                   />
                 );
