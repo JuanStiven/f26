@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import * as templateController from '../controllers/template.controller';
 import { authenticate, requireAdmin, requireEmployee } from '../middlewares/auth.middleware';
+import { uploadDocx } from '../middlewares/upload.middleware';
 
 const router = Router();
+
+// Subir plantilla .docx (solo admin)
+router.post('/upload-docx', authenticate, requireAdmin, uploadDocx.single('docxFile'), templateController.uploadDocxTemplate);
 
 // Listar todas las plantillas (empleados y admins)
 router.get('/', authenticate, requireEmployee, templateController.getAll);

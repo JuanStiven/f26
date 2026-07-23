@@ -32,13 +32,21 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAll = getAll;
 exports.getById = getById;
 exports.create = create;
 exports.update = update;
 exports.remove = remove;
+exports.getVersions = getVersions;
+exports.exportRecords = exportRecords;
+exports.uploadDocxTemplate = uploadDocxTemplate;
+const path_1 = __importDefault(require("path"));
 const templateService = __importStar(require("../services/template.service"));
+const docx_service_1 = require("../services/docx.service");
 const helpers_1 = require("../middlewares/helpers");
 async function getAll(req, res) {
     try {
@@ -93,6 +101,54 @@ async function remove(req, res) {
     }
     catch (error) {
         res.status(error.status || 500).json({ success: false, message: error.message });
+    }
+}
+async function getVersions(req, res) {
+    try {
+        const versions = await templateService.getTemplateVersions((0, helpers_1.getParam)(req, 'id'));
+        res.json({ success: true, data: versions });
+    }
+    catch (error) {
+        res.status(error.status || 500).json({ success: false, message: error.message });
+    }
+}
+async function exportRecords(req, res) {
+    try {
+        const templateId = (0, helpers_1.getParam)(req, 'id');
+        const version = String(req.query.version || 'Sin versión');
+        const csvContent = await templateService.exportTemplateRecords(templateId, version);
+        // Set headers to trigger file download in Excel-friendly CSV with UTF-8 BOM
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="registros_plantilla_${version}.csv"`);
+        res.write('\uFEFF'); // Write Byte Order Mark (BOM) for Excel
+        res.end(csvContent);
+    }
+    catch (error) {
+        res.status(error.status || 500).json({ success: false, message: error.message });
+    }
+}
+async function uploadDocxTemplate(req, res) {
+    try {
+        if (!req.file) {
+            res.status(400).json({ success: false, message: 'No se recibió ningún archivo .docx.' });
+            return;
+        }
+        const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
+        const relativePath = path_1.default.relative(uploadsDir, req.file.path);
+        const parseResult = await (0, docx_service_1.parseDocxTemplate)(req.file.path);
+        res.json({
+            success: true,
+            data: {
+                docxFilePath: relativePath,
+                docxOriginalName: req.file.originalname,
+                htmlPreview: parseResult.html,
+                rawText: parseResult.rawText,
+                detectedTags: parseResult.detectedTags,
+            },
+        });
+    }
+    catch (error) {
+        res.status(error.status || 500).json({ success: false, message: error.message || 'Error al procesar la plantilla .docx' });
     }
 }
 //# sourceMappingURL=template.controller.js.map

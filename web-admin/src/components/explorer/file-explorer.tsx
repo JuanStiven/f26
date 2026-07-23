@@ -730,7 +730,7 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                                   ) : (
                                     <FileText className="h-4 w-4 text-red-500" />
                                   )}
-                                  <span className="hover:underline">{node.name}</span>
+                                  <span className="hover:underline break-all max-w-[260px] sm:max-w-md inline-block" title={node.name}>{node.name}</span>
                                 </td>
                                 <td className="px-4 py-3 text-muted-foreground capitalize">
                                   {node.type === 'folder' ? 'Carpeta' : `${node.fileType}`}
@@ -813,24 +813,26 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
             <div className="space-y-6 flex-1 flex flex-col justify-between">
               <div>
                 {/* File Header */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-4 gap-4">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-4 gap-4 w-full">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     {currentNode.fileType === 'template' ? (
-                      <div className="p-3 bg-brand-accent/15 text-brand-accent rounded-lg">
+                      <div className="p-3 bg-brand-accent/15 text-brand-accent rounded-lg shrink-0">
                         <FileCode className="h-6 w-6" />
                       </div>
                     ) : (
-                      <div className="p-3 bg-red-500/15 text-red-500 rounded-lg">
+                      <div className="p-3 bg-red-500/15 text-red-500 rounded-lg shrink-0">
                         <FileText className="h-6 w-6" />
                       </div>
                     )}
-                    <div>
-                      <h3 className="font-bold text-base text-foreground">{currentNode.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Ruta Servidor: <span className="font-mono text-primary bg-primary/5 px-1 py-0.5 rounded">{currentNode.path}</span></p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-base text-foreground break-all">{currentNode.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 break-all">
+                        Ruta Servidor: <span className="font-mono text-primary bg-primary/5 px-1 py-0.5 rounded break-all inline-block max-w-full">{currentNode.path}</span>
+                      </p>
                     </div>
                   </div>
 
-                  <div className="relative">
+                  <div className="relative shrink-0 self-start sm:self-center">
                     <button
                       onClick={() => setActionsDropdownOpen(!actionsDropdownOpen)}
                       className="px-4 py-2 bg-primary text-white text-xs rounded-lg flex items-center gap-2 font-semibold transition-all hover:bg-primary/95"

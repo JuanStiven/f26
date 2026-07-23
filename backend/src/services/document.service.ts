@@ -2,6 +2,7 @@ import prisma from '../models/prisma';
 import path from 'path';
 import fs from 'fs';
 import PDFDocument from 'pdfkit';
+import { generateDocxFromTemplate } from './docx.service';
 
 export async function getAllDocuments() {
   const docs = await prisma.signedDocument.findMany({
@@ -100,8 +101,6 @@ export async function createDocument(data: {
   const timestamp = Date.now();
   const baseFileName = `${sanitizedName}_${sanitizedUser}_${timestamp}`;
   const jsonFileName = `${baseFileName}.json`;
-  const pdfFileName = `${baseFileName}.pdf`;
-  const filePath = path.join(storagePath, pdfFileName);
 
   // Guardar los datos del formulario en disco
   const fullJsonPath = path.join(folderPath, jsonFileName);
@@ -116,7 +115,48 @@ export async function createDocument(data: {
     submittedAt: new Date().toISOString(),
   }, null, 2));
 
-  // Generar y guardar el PDF
+  // ─── GENERACIÓN DOCX SI ES PLANTILLA PRECARGADA DOCX ───
+  if (template.isDocxTemplate && template.docxFilePath) {
+    const docxFileName = `${baseFileName}.docx`;
+    const fullDocxPath = path.join(folderPath, docxFileName);
+    const docxTemplatePath = path.join(uploadsDir, template.docxFilePath);
+
+    const docxBuffer = generateDocxFromTemplate(
+      docxTemplatePath,
+      {
+        ...data.formData,
+        diligenciado_por: user.name,
+        cedula_diligenciado_por: user.document,
+        fecha_diligenciamiento: new Date().toLocaleDateString(),
+      },
+      (template.fields as any[]) || []
+    );
+
+    fs.writeFileSync(fullDocxPath, docxBuffer);
+    const relativeFilePath = path.join(storagePath, docxFileName);
+
+    return prisma.signedDocument.create({
+      data: {
+        templateId: data.templateId,
+        filledById: data.filledById,
+        data: data.formData,
+        photoUrl: data.photoUrl || null,
+        signatureUrl: data.signatureUrl || null,
+        syncStatus: 'SYNCED',
+        filePath: relativeFilePath,
+        templateSnapshot: template,
+      },
+      include: {
+        template: { select: { name: true } },
+        filledBy: { select: { name: true } },
+      },
+    });
+  }
+
+  // ─── GENERACIÓN PDF ESTÁNDAR ───
+  const pdfFileName = `${baseFileName}.pdf`;
+  const filePath = path.join(storagePath, pdfFileName);
+
   const fullPdfPath = path.join(folderPath, pdfFileName);
   const pdfMargin = 70.86; // 2.5 cm en pt (2.5 * 28.346 = 70.865)
   const doc = new PDFDocument({ margin: pdfMargin, bufferPages: true });

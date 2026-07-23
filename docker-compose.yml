@@ -24,7 +24,7 @@ services:
       - '3000:3000'
     environment:
       - DATABASE_URL=postgresql://admin:adminpassword@db:5432/ops_documents?schema=public
-      - JWT_SECRET=supersecretjwtkey
+      - JWT_SECRET=ese_norte3_jwt_secret_key_2026_f26
     depends_on:
       - db
 

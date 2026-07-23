@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import * as templateService from '../services/template.service';
+import { parseDocxTemplate } from '../services/docx.service';
 import { getParam } from '../middlewares/helpers';
 
 export async function getAll(req: Request, res: Response): Promise<void> {
@@ -82,5 +84,32 @@ export async function exportRecords(req: Request, res: Response): Promise<void> 
     res.end(csvContent);
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });
+  }
+}
+
+export async function uploadDocxTemplate(req: Request, res: Response): Promise<void> {
+  try {
+    if (!req.file) {
+      res.status(400).json({ success: false, message: 'No se recibió ningún archivo .docx.' });
+      return;
+    }
+
+    const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+    const relativePath = path.relative(uploadsDir, req.file.path);
+
+    const parseResult = await parseDocxTemplate(req.file.path);
+
+    res.json({
+      success: true,
+      data: {
+        docxFilePath: relativePath,
+        docxOriginalName: req.file.originalname,
+        htmlPreview: parseResult.html,
+        rawText: parseResult.rawText,
+        detectedTags: parseResult.detectedTags,
+      },
+    });
+  } catch (error: any) {
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Error al procesar la plantilla .docx' });
   }
 }

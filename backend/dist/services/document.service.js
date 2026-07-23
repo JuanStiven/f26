@@ -13,6 +13,7 @@ const prisma_1 = __importDefault(require("../models/prisma"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
+const docx_service_1 = require("./docx.service");
 async function getAllDocuments() {
     const docs = await prisma_1.default.signedDocument.findMany({
         orderBy: { createdAt: 'desc' },
@@ -90,8 +91,6 @@ async function createDocument(data) {
     const timestamp = Date.now();
     const baseFileName = `${sanitizedName}_${sanitizedUser}_${timestamp}`;
     const jsonFileName = `${baseFileName}.json`;
-    const pdfFileName = `${baseFileName}.pdf`;
-    const filePath = path_1.default.join(storagePath, pdfFileName);
     // Guardar los datos del formulario en disco
     const fullJsonPath = path_1.default.join(folderPath, jsonFileName);
     fs_1.default.writeFileSync(fullJsonPath, JSON.stringify({
@@ -104,9 +103,42 @@ async function createDocument(data) {
         signatureUrl: data.signatureUrl,
         submittedAt: new Date().toISOString(),
     }, null, 2));
-    // Generar y guardar el PDF
+    // ─── GENERACIÓN DOCX SI ES PLANTILLA PRECARGADA DOCX ───
+    if (template.isDocxTemplate && template.docxFilePath) {
+        const docxFileName = `${baseFileName}.docx`;
+        const fullDocxPath = path_1.default.join(folderPath, docxFileName);
+        const docxTemplatePath = path_1.default.join(uploadsDir, template.docxFilePath);
+        const docxBuffer = (0, docx_service_1.generateDocxFromTemplate)(docxTemplatePath, {
+            ...data.formData,
+            diligenciado_por: user.name,
+            cedula_diligenciado_por: user.document,
+            fecha_diligenciamiento: new Date().toLocaleDateString(),
+        }, template.fields || []);
+        fs_1.default.writeFileSync(fullDocxPath, docxBuffer);
+        const relativeFilePath = path_1.default.join(storagePath, docxFileName);
+        return prisma_1.default.signedDocument.create({
+            data: {
+                templateId: data.templateId,
+                filledById: data.filledById,
+                data: data.formData,
+                photoUrl: data.photoUrl || null,
+                signatureUrl: data.signatureUrl || null,
+                syncStatus: 'SYNCED',
+                filePath: relativeFilePath,
+                templateSnapshot: template,
+            },
+            include: {
+                template: { select: { name: true } },
+                filledBy: { select: { name: true } },
+            },
+        });
+    }
+    // ─── GENERACIÓN PDF ESTÁNDAR ───
+    const pdfFileName = `${baseFileName}.pdf`;
+    const filePath = path_1.default.join(storagePath, pdfFileName);
     const fullPdfPath = path_1.default.join(folderPath, pdfFileName);
-    const doc = new pdfkit_1.default({ margin: 50, bufferPages: true });
+    const pdfMargin = 70.86; // 2.5 cm en pt (2.5 * 28.346 = 70.865)
+    const doc = new pdfkit_1.default({ margin: pdfMargin, bufferPages: true });
     doc.pipe(fs_1.default.createWriteStream(fullPdfPath));
     // ─── CONFIGURACIÓN DE ESTILOS ───
     const companySettings = await prisma_1.default.companySettings.findFirst();
@@ -115,57 +147,72 @@ async function createDocument(data) {
     const titleFontSize = companySettings?.pdfTitleFontSize || 16;
     const subtitleFontSize = companySettings?.pdfSubtitleFontSize || 12;
     const paragraphFontSize = companySettings?.pdfParagraphFontSize || 11;
-    // ─── CABECERA DEL DOCUMENTO ───
-    const headerTop = 50;
-    if (template.isQualityDocument) {
-        // FORMATO DE CALIDAD (Tabla)
-        const tableTop = headerTop;
-        const col1Width = 120;
-        const col3Width = 140;
-        const col2Width = doc.page.width - 100 - col1Width - col3Width;
-        // Draw table borders
-        const tableHeight = 60;
-        doc.lineWidth(1).strokeColor('#000000');
-        // Outer border
-        doc.rect(50, tableTop, doc.page.width - 100, tableHeight).stroke();
-        // Vertical lines
-        doc.moveTo(50 + col1Width, tableTop).lineTo(50 + col1Width, tableTop + tableHeight).stroke();
-        doc.moveTo(50 + col1Width + col2Width, tableTop).lineTo(50 + col1Width + col2Width, tableTop + tableHeight).stroke();
-        // Col 2 horizontal line (middle)
-        doc.moveTo(50 + col1Width, tableTop + tableHeight / 2).lineTo(50 + col1Width + col2Width, tableTop + tableHeight / 2).stroke();
-        // Col 3 horizontal lines (thirds)
-        doc.moveTo(50 + col1Width + col2Width, tableTop + tableHeight / 3).lineTo(doc.page.width - 50, tableTop + tableHeight / 3).stroke();
-        doc.moveTo(50 + col1Width + col2Width, tableTop + (tableHeight / 3) * 2).lineTo(doc.page.width - 50, tableTop + (tableHeight / 3) * 2).stroke();
-        // Col 3 vertical separator
-        doc.moveTo(50 + col1Width + col2Width + 60, tableTop).lineTo(50 + col1Width + col2Width + 60, tableTop + tableHeight).stroke();
-        // Col 1: Logo
+    // ─── CONFIGURACIÓN DEL ENCABEZADO DE CALIDAD ───
+    const tableTop = pdfMargin;
+    const col1Width = 120;
+    const col3Width = 140;
+    const col2Width = doc.page.width - (pdfMargin * 2) - col1Width - col3Width;
+    // Medir alturas del texto para el encabezado de calidad
+    doc.font('Helvetica-Bold');
+    const companyNameText = "EMPRESA SOCIAL DEL ESTADO NORTE 3 - E.S.E.";
+    const companyNameHeight = doc.fontSize(10).heightOfString(companyNameText, { width: col2Width - 10, align: 'center' });
+    const titleText = template.name.toUpperCase();
+    const titleHeight = doc.fontSize(10).heightOfString(titleText, { width: col2Width - 10, align: 'center' });
+    const topHalfHeight = Math.max(companyNameHeight + 14, 30);
+    const bottomHalfHeight = Math.max(titleHeight + 14, 30);
+    const tableHeight = topHalfHeight + bottomHalfHeight;
+    // Función para dibujar el encabezado de calidad en cualquier página
+    const drawQualityHeader = (docInstance) => {
+        // 1. Contorno
+        docInstance.lineWidth(1).strokeColor('#000000');
+        docInstance.rect(pdfMargin, tableTop, docInstance.page.width - (pdfMargin * 2), tableHeight).stroke();
+        // 2. Líneas divisoras verticales
+        docInstance.moveTo(pdfMargin + col1Width, tableTop).lineTo(pdfMargin + col1Width, tableTop + tableHeight).stroke();
+        docInstance.moveTo(pdfMargin + col1Width + col2Width, tableTop).lineTo(pdfMargin + col1Width + col2Width, tableTop + tableHeight).stroke();
+        // 3. Divisor horizontal Columna 2
+        docInstance.moveTo(pdfMargin + col1Width, tableTop + topHalfHeight).lineTo(pdfMargin + col1Width + col2Width, tableTop + topHalfHeight).stroke();
+        // 4. Divisores horizontales Columna 3 (tercios)
+        const rowHeight = tableHeight / 3;
+        docInstance.moveTo(pdfMargin + col1Width + col2Width, tableTop + rowHeight).lineTo(docInstance.page.width - pdfMargin, tableTop + rowHeight).stroke();
+        docInstance.moveTo(pdfMargin + col1Width + col2Width, tableTop + rowHeight * 2).lineTo(docInstance.page.width - pdfMargin, tableTop + rowHeight * 2).stroke();
+        // 5. Divisor vertical interno Columna 3
+        docInstance.moveTo(pdfMargin + col1Width + col2Width + 60, tableTop).lineTo(pdfMargin + col1Width + col2Width + 60, tableTop + tableHeight).stroke();
+        // 6. Columna 1: Logo
         if (companySettings?.logoUrl) {
             try {
                 const base64Data = companySettings.logoUrl.replace(/^data:image\/\w+;base64,/, "");
                 const logoBuffer = Buffer.from(base64Data, 'base64');
                 const logoW = companySettings.pdfLogoWidth || 110;
                 const logoH = companySettings.pdfLogoHeight || 50;
-                doc.image(logoBuffer, 55, tableTop + 5, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                const logoTop = tableTop + (tableHeight - logoH) / 2;
+                docInstance.image(logoBuffer, pdfMargin + (col1Width - logoW) / 2, logoTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
             }
             catch (e) {
                 console.error('Error adding logo to PDF:', e);
             }
         }
-        // Col 2: Texts
-        doc.fillColor('#000000').fontSize(10).font('Helvetica-Bold');
-        doc.text("EMPRESA SOCIAL DEL ESTADO NORTE 3 - E.S.E.", 50 + col1Width, tableTop + 10, { width: col2Width, align: 'center' });
-        doc.fontSize(11);
-        doc.text(template.name.toUpperCase(), 50 + col1Width, tableTop + 40, { width: col2Width, align: 'center' });
-        // Col 3: Data
-        doc.fontSize(8);
-        doc.text("CÓDIGO", 50 + col1Width + col2Width + 5, tableTop + 7, { width: 50, align: 'left' });
-        doc.text(template.qualityCode || '', 50 + col1Width + col2Width + 65, tableTop + 7, { width: 70, align: 'center' });
-        doc.text("VERSIÓN", 50 + col1Width + col2Width + 5, tableTop + 27, { width: 50, align: 'left' });
-        doc.text(template.qualityVersion || '', 50 + col1Width + col2Width + 65, tableTop + 27, { width: 70, align: 'center' });
-        doc.text("FECHA", 50 + col1Width + col2Width + 5, tableTop + 47, { width: 50, align: 'left' });
-        doc.text(template.qualityDate || '', 50 + col1Width + col2Width + 65, tableTop + 47, { width: 70, align: 'center' });
+        // 7. Columna 2: Textos (Centrados verticalmente)
+        docInstance.fillColor('#000000').fontSize(10).font('Helvetica-Bold');
+        docInstance.text(companyNameText, pdfMargin + col1Width + 5, tableTop + (topHalfHeight - companyNameHeight) / 2, { width: col2Width - 10, align: 'center' });
+        docInstance.text(titleText, pdfMargin + col1Width + 5, tableTop + topHalfHeight + (bottomHalfHeight - titleHeight) / 2, { width: col2Width - 10, align: 'center' });
+        // 8. Columna 3: Información
+        docInstance.fontSize(8);
+        // Fila 1: Código
+        docInstance.text("CÓDIGO", pdfMargin + col1Width + col2Width + 5, tableTop + (rowHeight / 2) - 4, { width: 50, align: 'left' });
+        docInstance.text(template.qualityCode || '', pdfMargin + col1Width + col2Width + 65, tableTop + (rowHeight / 2) - 4, { width: 70, align: 'center' });
+        // Fila 2: Versión
+        docInstance.text("VERSIÓN", pdfMargin + col1Width + col2Width + 5, tableTop + rowHeight + (rowHeight / 2) - 4, { width: 50, align: 'left' });
+        docInstance.text(template.qualityVersion || '', pdfMargin + col1Width + col2Width + 65, tableTop + rowHeight + (rowHeight / 2) - 4, { width: 70, align: 'center' });
+        // Fila 3: Fecha
+        docInstance.text("FECHA", pdfMargin + col1Width + col2Width + 5, tableTop + (rowHeight * 2) + (rowHeight / 2) - 4, { width: 50, align: 'left' });
+        docInstance.text(template.qualityDate || '', pdfMargin + col1Width + col2Width + 65, tableTop + (rowHeight * 2) + (rowHeight / 2) - 4, { width: 70, align: 'center' });
+    };
+    // ─── CABECERA DEL DOCUMENTO ───
+    const headerTop = pdfMargin;
+    if (template.isQualityDocument) {
+        drawQualityHeader(doc);
         doc.y = tableTop + tableHeight + 20;
-        doc.x = 50;
+        doc.x = pdfMargin;
     }
     else {
         // FORMATO LIBRE (Clásico)
@@ -175,17 +222,17 @@ async function createDocument(data) {
                 const logoBuffer = Buffer.from(base64Data, 'base64');
                 const logoW = companySettings.pdfLogoWidth || 100;
                 const logoH = companySettings.pdfLogoHeight || 100;
-                doc.image(logoBuffer, 50, headerTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
+                doc.image(logoBuffer, pdfMargin, headerTop, { width: logoW, height: logoH, fit: [logoW, logoH] });
             }
             catch (e) {
                 console.error('Error adding logo to PDF:', e);
             }
         }
-        const alignSettings = { align: 'center', width: doc.page.width - 100 };
+        const alignSettings = { align: 'center', width: doc.page.width - (pdfMargin * 2) };
         doc.fillColor('#000000');
         doc.fontSize(10).font('Helvetica-Bold');
         if (companySettings) {
-            doc.text(companySettings.country?.toUpperCase() || 'COLOMBIA', 50, headerTop + 5, alignSettings);
+            doc.text(companySettings.country?.toUpperCase() || 'COLOMBIA', pdfMargin, headerTop + 5, alignSettings);
             doc.text(companySettings.department?.toUpperCase() || 'ANTIOQUIA', alignSettings);
             doc.text(companySettings.name.toUpperCase(), alignSettings);
             doc.font('Helvetica').text(`NIT: ${companySettings.nit}`, alignSettings);
@@ -194,7 +241,7 @@ async function createDocument(data) {
         // Restore Y position below the logo/header (whichever is taller)
         const afterHeaderY = Math.max(doc.y, headerTop + 75);
         // Separator Line
-        doc.moveTo(50, afterHeaderY + 10).lineTo(doc.page.width - 50, afterHeaderY + 10).lineWidth(1).strokeColor('#cccccc').stroke();
+        doc.moveTo(pdfMargin, afterHeaderY + 10).lineTo(doc.page.width - pdfMargin, afterHeaderY + 10).lineWidth(1).strokeColor('#cccccc').stroke();
         doc.y = afterHeaderY + 30;
         // ─── TÍTULO DE PLANTILLA (Solo para libre) ───
         doc.fillColor(titleColor);
@@ -202,8 +249,18 @@ async function createDocument(data) {
         doc.moveDown(0.5);
     }
     const checkPageBreak = (requiredHeight) => {
-        if (doc.y + requiredHeight > doc.page.height - 80) {
+        // Evitar desbordamiento sobre el pie de página
+        const footerMargin = template.footer ? 90 : 60;
+        if (doc.y + requiredHeight > doc.page.height - footerMargin) {
             doc.addPage();
+            if (template.isQualityDocument) {
+                drawQualityHeader(doc);
+                doc.y = tableTop + tableHeight + 20;
+            }
+            else {
+                doc.y = pdfMargin;
+            }
+            doc.x = pdfMargin;
         }
     };
     const fields = template.fields || [];
@@ -315,7 +372,7 @@ async function createDocument(data) {
                             const trimmedPart = part.trim();
                             if (trimmedPart) {
                                 doc.font('Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
-                                doc.text(trimmedPart, { align: 'justify' });
+                                doc.text(trimmedPart, { align: 'justify', lineGap: 3 });
                             }
                             if (idx < parts.length - 1) {
                                 if (bt.type === 'image') {
@@ -328,15 +385,15 @@ async function createDocument(data) {
                                         doc.moveDown(0.5);
                                     }
                                     catch (e) {
-                                        doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Error cargando imagen]`);
+                                        doc.fillColor('#4B5563').fontSize(paragraphFontSize).font('Helvetica').text(`[Error cargando imagen]`, { lineGap: 3 });
                                     }
                                 }
                                 else if (bt.type === 'table') {
                                     const tValue = bt.value;
                                     if (tValue.length > 0) {
                                         const cols = Object.keys(tValue[0]);
-                                        const startX = 50;
-                                        const tableWidth = 500;
+                                        const startX = pdfMargin;
+                                        const tableWidth = doc.page.width - (pdfMargin * 2);
                                         const colWidth = tableWidth / cols.length;
                                         doc.moveDown(0.5);
                                         const headerY = doc.y;
@@ -363,7 +420,7 @@ async function createDocument(data) {
                                             doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
                                             doc.y += 5;
                                         });
-                                        doc.x = 50;
+                                        doc.x = pdfMargin;
                                         doc.moveDown(0.5);
                                     }
                                 }
@@ -402,8 +459,8 @@ async function createDocument(data) {
                         }
                     }
                     if (rows.length > 0) {
-                        const startX = 50;
-                        const tableWidth = doc.page.width - 100;
+                        const startX = pdfMargin;
+                        const tableWidth = doc.page.width - (pdfMargin * 2);
                         const maxCols = Math.max(...rows.map(r => r.cells.length));
                         const colWidth = tableWidth / maxCols;
                         doc.moveDown(0.5);
@@ -445,14 +502,14 @@ async function createDocument(data) {
                             });
                             doc.y = currentDrawY + maxCellHeight;
                         });
-                        doc.x = 50;
+                        doc.x = pdfMargin;
                         doc.moveDown(0.5);
                     }
                     return;
                 }
                 if (block.tag === 'hr') {
                     doc.moveDown(0.3);
-                    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).lineWidth(0.5).strokeColor('#cccccc').stroke();
+                    doc.moveTo(pdfMargin, doc.y).lineTo(doc.page.width - pdfMargin, doc.y).lineWidth(0.5).strokeColor('#cccccc').stroke();
                     doc.moveDown(0.5);
                     return;
                 }
@@ -540,25 +597,25 @@ async function createDocument(data) {
                 }
                 else if (block.tag === 'blockquote') {
                     // Indent blockquotes
-                    doc.x = 70;
+                    doc.x = pdfMargin + 20;
                 }
                 else if (block.tag === 'li' || block.tag === 'li-unordered') {
                     // Add bullet point, check if bold
                     const isBold = tokens.length > 0 && tokens[0].bold;
                     doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
-                    doc.text('• ', { continued: true, align: 'left' });
+                    doc.text('• ', { continued: true, align: 'left', lineGap: 3 });
                 }
                 else if (block.tag === 'li-ordered') {
                     // Add numbered list item, check if bold
                     const isBold = tokens.length > 0 && tokens[0].bold;
                     doc.font(isBold ? 'Helvetica-Bold' : 'Helvetica').fontSize(paragraphFontSize).fillColor('#000000');
-                    doc.text(`${block.listIndex || 1}. `, { continued: true, align: 'left' });
+                    doc.text(`${block.listIndex || 1}. `, { continued: true, align: 'left', lineGap: 3 });
                 }
                 doc.fillColor('#000000').fontSize(fontSize);
                 if (tokens.length === 0) {
                     doc.moveDown(0.3);
                     if (block.tag === 'blockquote')
-                        doc.x = 50;
+                        doc.x = pdfMargin;
                     return;
                 }
                 tokens.forEach((t, i) => {
@@ -584,12 +641,13 @@ async function createDocument(data) {
                             align,
                             strike: t.strike,
                             underline: t.underline,
+                            lineGap: 3,
                         });
                     }
                 });
                 // Reset indent for blockquote
                 if (block.tag === 'blockquote')
-                    doc.x = 50;
+                    doc.x = pdfMargin;
                 if (block.tag.startsWith('h')) {
                     doc.moveDown(0.3);
                 }
@@ -620,7 +678,7 @@ async function createDocument(data) {
             doc.fontSize(subtitleFontSize).font('Helvetica-Bold').fillColor(subtitleColor).text(category.toUpperCase());
             doc.moveDown(0.5);
             catFields.forEach(field => {
-                doc.fillColor('#000000').fontSize(paragraphFontSize).font('Helvetica-Bold').text(`${field.label}:`);
+                doc.fillColor('#000000').fontSize(paragraphFontSize).font('Helvetica-Bold').text(`${field.label}:`, { lineGap: 3 });
                 if (typeof field.value === 'string' && field.value.startsWith('data:image/')) {
                     try {
                         const base64Data = field.value.replace(/^data:image\/\w+;base64,/, "");
@@ -631,13 +689,13 @@ async function createDocument(data) {
                         doc.image(imgBuffer, { width: 150 });
                     }
                     catch (e) {
-                        doc.font('Helvetica').text(`[Error cargando imagen]`);
+                        doc.font('Helvetica').text(`[Error cargando imagen]`, { lineGap: 3 });
                     }
                 }
                 else if (Array.isArray(field.value) && field.value.length > 0) {
                     const cols = Object.keys(field.value[0]);
-                    const startX = 50;
-                    const tableWidth = 500;
+                    const startX = pdfMargin;
+                    const tableWidth = doc.page.width - (pdfMargin * 2);
                     const colWidth = tableWidth / cols.length;
                     doc.moveDown(0.5);
                     const headerY = doc.y;
@@ -664,13 +722,21 @@ async function createDocument(data) {
                         doc.moveTo(startX, doc.y).lineTo(startX + tableWidth, doc.y).lineWidth(0.5).strokeColor('#E5E7EB').stroke();
                         doc.y += 5;
                     });
-                    doc.x = 50; // Reset X
+                    doc.x = pdfMargin; // Reset X
                 }
                 else if (Array.isArray(field.value)) {
-                    doc.font('Helvetica').fontSize(paragraphFontSize).text('Tabla sin datos');
+                    doc.font('Helvetica').fontSize(paragraphFontSize).text('Tabla sin datos', { lineGap: 3 });
                 }
                 else {
-                    doc.font('Helvetica').fontSize(paragraphFontSize).text(`${field.value}`);
+                    let textVal = String(field.value || '');
+                    if (field.type === 'textarea') {
+                        textVal = textVal.replace(/<br\s*\/?>/gi, '\n')
+                            .replace(/<\/p>/gi, '\n')
+                            .replace(/<[^>]*>/g, '')
+                            .replace(/&nbsp;/gi, ' ')
+                            .trim();
+                    }
+                    doc.font('Helvetica').fontSize(paragraphFontSize).text(textVal, { lineGap: 3 });
                 }
                 doc.moveDown(0.5);
             });
@@ -683,7 +749,7 @@ async function createDocument(data) {
         doc.switchToPage(i);
         const bottom = doc.page.margins.bottom;
         doc.page.margins.bottom = 0;
-        doc.fillColor('#6B7280').fontSize(8).font('Helvetica');
+        const pageNumText = `Página ${i + 1} de ${pages.count}`;
         let footerText = '';
         if (formattedFooter) {
             footerText = formattedFooter
@@ -691,19 +757,24 @@ async function createDocument(data) {
                 .replace(/<[^>]*>/g, '') // Strip all HTML tags
                 .trim();
         }
+        const footerStartY = doc.page.height - 55;
+        // Dibujar línea separadora arriba del pie de página
+        doc.lineWidth(0.5).strokeColor('#cccccc');
+        doc.moveTo(pdfMargin, footerStartY - 5).lineTo(doc.page.width - pdfMargin, footerStartY - 5).stroke();
+        doc.fillColor('#6B7280').fontSize(8).font('Helvetica');
+        // Dibujar paginación alineada a la derecha
+        doc.text(pageNumText, doc.page.width - pdfMargin - 100, footerStartY, { align: 'right', width: 100 });
         if (footerText) {
-            // Draw a line separator above the custom footer
-            doc.lineWidth(0.5).strokeColor('#cccccc');
-            doc.moveTo(50, doc.page.height - 60).lineTo(doc.page.width - 50, doc.page.height - 60).stroke();
             doc.fillColor('#4B5563').fontSize(8).font('Helvetica');
-            doc.text(footerText, 50, doc.page.height - 52, { align: 'center', width: doc.page.width - 100 });
-            // Render the system audit footer slightly lower
+            doc.text(footerText, pdfMargin, footerStartY, { align: 'left', width: doc.page.width - (pdfMargin * 2) - 110 });
+            // Dibujar datos de auditoría al final centrado
             doc.fillColor('#6B7280').fontSize(7);
-            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha: ${new Date().toLocaleString()}`, 50, doc.page.height - 24, { align: 'center', width: doc.page.width - 100 });
+            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha: ${new Date().toLocaleString()}`, pdfMargin, doc.page.height - 24, { align: 'center', width: doc.page.width - (pdfMargin * 2) });
         }
         else {
-            // Standard audit footer only
-            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha de diligenciamiento: ${new Date().toLocaleString()}`, 50, doc.page.height - 40, { align: 'center', width: doc.page.width - 100 });
+            // Solo pie de página estándar
+            doc.fillColor('#6B7280').fontSize(8).font('Helvetica');
+            doc.text(`Diligenciado por: ${user.name} (C.C. ${user.document})  |  Fecha: ${new Date().toLocaleString()}`, pdfMargin, footerStartY, { align: 'left', width: doc.page.width - (pdfMargin * 2) - 110 });
         }
         doc.page.margins.bottom = bottom;
     }

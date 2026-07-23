@@ -63,6 +63,9 @@ export async function createTemplate(data: {
   qualityDate?: string;
   isCreativeMode?: boolean;
   creativeElements?: any;
+  isDocxTemplate?: boolean;
+  docxFilePath?: string;
+  docxOriginalName?: string;
 }) {
   return prisma.template.create({
     data: {
@@ -78,6 +81,9 @@ export async function createTemplate(data: {
       qualityDate: data.qualityDate || '',
       isCreativeMode: data.isCreativeMode || false,
       creativeElements: data.creativeElements || [],
+      isDocxTemplate: data.isDocxTemplate || false,
+      docxFilePath: data.docxFilePath || null,
+      docxOriginalName: data.docxOriginalName || null,
       assignedUsers: data.assignedUsers ? {
         connect: data.assignedUsers.map(id => ({ id }))
       } : undefined
@@ -91,7 +97,7 @@ export async function createTemplate(data: {
 
 export async function updateTemplate(
   id: string,
-  data: { name?: string; description?: string; descriptionStyles?: string; footer?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; }
+  data: { name?: string; description?: string; descriptionStyles?: string; footer?: string; storagePath?: string; fields?: any[]; assignedUsers?: string[]; isQualityDocument?: boolean; qualityCode?: string; qualityVersion?: string; qualityDate?: string; isCreativeMode?: boolean; creativeElements?: any; isDocxTemplate?: boolean; docxFilePath?: string; docxOriginalName?: string; }
 ) {
   const exists = await prisma.template.findUnique({ where: { id } });
   if (!exists) {
@@ -113,6 +119,9 @@ export async function updateTemplate(
       ...(data.qualityDate !== undefined && { qualityDate: data.qualityDate }),
       ...(data.isCreativeMode !== undefined && { isCreativeMode: data.isCreativeMode }),
       ...(data.creativeElements !== undefined && { creativeElements: data.creativeElements }),
+      ...(data.isDocxTemplate !== undefined && { isDocxTemplate: data.isDocxTemplate }),
+      ...(data.docxFilePath !== undefined && { docxFilePath: data.docxFilePath }),
+      ...(data.docxOriginalName !== undefined && { docxOriginalName: data.docxOriginalName }),
       ...(data.assignedUsers !== undefined && {
         assignedUsers: {
           set: data.assignedUsers.map(userId => ({ id: userId }))

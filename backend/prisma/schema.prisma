@@ -102,6 +102,10 @@ model Template {
   isCreativeMode    Boolean @default(false)
   creativeElements  Json    @default("[]")
 
+  isDocxTemplate    Boolean @default(false)
+  docxFilePath      String?
+  docxOriginalName  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

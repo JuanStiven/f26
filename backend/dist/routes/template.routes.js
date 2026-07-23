@@ -36,11 +36,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const templateController = __importStar(require("../controllers/template.controller"));
 const auth_middleware_1 = require("../middlewares/auth.middleware");
+const upload_middleware_1 = require("../middlewares/upload.middleware");
 const router = (0, express_1.Router)();
+// Subir plantilla .docx (solo admin)
+router.post('/upload-docx', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, upload_middleware_1.uploadDocx.single('docxFile'), templateController.uploadDocxTemplate);
 // Listar todas las plantillas (empleados y admins)
 router.get('/', auth_middleware_1.authenticate, auth_middleware_1.requireEmployee, templateController.getAll);
 // Obtener plantilla por ID
 router.get('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireEmployee, templateController.getById);
+// Obtener versiones de la plantilla
+router.get('/:id/versions', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.getVersions);
+// Exportar registros de plantilla en formato Excel/CSV
+router.get('/:id/export', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.exportRecords);
 // Crear plantilla (solo admin)
 router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.create);
 // Actualizar plantilla (solo admin)
