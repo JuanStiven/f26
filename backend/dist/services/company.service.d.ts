@@ -1,3 +1,4 @@
+export declare function saveBase64ToFile(base64Str: string, subfolder: string, prefix: string): string;
 export declare function getSettings(): Promise<{
     name: string;
     id: string;

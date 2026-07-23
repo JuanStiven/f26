@@ -100,7 +100,14 @@ export function MarkdownRenderer({ text, data = {} }: { text: string, data?: Rec
          const label = part.replace(/^{{\s*/, '').replace(/\s*}}$/, '');
          const value = data[label];
          if (value !== undefined) {
-           if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('file://'))) {
+           const isImgVal = typeof value === 'string' && (
+             value.startsWith('data:image/') ||
+             value.startsWith('file://') ||
+             value.startsWith('/uploads/') ||
+             value.includes('/uploads/') ||
+             /\.(png|jpe?g|gif|webp)$/i.test(value)
+           );
+           if (isImgVal) {
              return <img key={i} src={value} alt={label} className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
            } else if (Array.isArray(value)) {
              if (value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
@@ -1162,7 +1169,13 @@ export default function App() {
                   const fieldDef = (documentModal.template?.fields || []).find((f: any) => f.id === key);
                   const fieldLabel = fieldDef ? fieldDef.label : key;
                   
-                  const isMedia = typeof val === 'string' && (val.startsWith('file://') || val.startsWith('data:image/'));
+                  const isMedia = typeof val === 'string' && (
+                    val.startsWith('file://') ||
+                    val.startsWith('data:image/') ||
+                    val.startsWith('/uploads/') ||
+                    val.includes('/uploads/') ||
+                    /\.(png|jpe?g|gif|webp)$/i.test(val)
+                  );
 
                   return (
                     <div key={key} className="space-y-1">

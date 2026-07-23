@@ -4,6 +4,17 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { colors } from '../theme/colors';
 
+const getImageUri = (uri: string) => {
+  if (!uri || typeof uri !== 'string') return uri;
+  if (uri.startsWith('data:image/') || uri.startsWith('file://') || uri.startsWith('http://') || uri.startsWith('https://')) {
+    return uri;
+  }
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+  const baseUrl = API_URL.replace('/api', '');
+  const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
 interface FillFormScreenProps {
   selectedTemplate: any;
   formData: any;
@@ -219,7 +230,7 @@ export const FillFormScreen: React.FC<FillFormScreenProps> = ({
                   <View>
                     {formData[field.id] ? (
                       <View style={{ position: 'relative' }}>
-                        <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 200, borderRadius: 8 }} resizeMode="cover" />
+                        <Image source={{ uri: getImageUri(formData[field.id]) }} style={{ width: '100%', height: 200, borderRadius: 8 }} resizeMode="cover" />
                         <TouchableOpacity 
                           style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
                           onPress={() => handleTakePhoto(field.id)}
@@ -239,7 +250,7 @@ export const FillFormScreen: React.FC<FillFormScreenProps> = ({
                   <View>
                     {formData[field.id] ? (
                       <View style={{ position: 'relative', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, overflow: 'hidden', backgroundColor: 'white' }}>
-                        <Image source={{ uri: formData[field.id] }} style={{ width: '100%', height: 150 }} resizeMode="contain" />
+                        <Image source={{ uri: getImageUri(formData[field.id]) }} style={{ width: '100%', height: 150 }} resizeMode="contain" />
                         <TouchableOpacity 
                           style={{ position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', padding: 8, borderRadius: 20 }}
                           onPress={() => {

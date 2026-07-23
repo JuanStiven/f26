@@ -9,6 +9,7 @@ const pizzip_1 = __importDefault(require("pizzip"));
 const docxtemplater_1 = __importDefault(require("docxtemplater"));
 const mammoth_1 = __importDefault(require("mammoth"));
 const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 async function parseDocxTemplate(filePath) {
     if (!fs_1.default.existsSync(filePath)) {
         throw new Error(`El archivo DOCX no existe en la ruta: ${filePath}`);
@@ -96,12 +97,21 @@ function generateDocxFromTemplate(templatePath, formData, fields = []) {
                 const base64Data = tagValue.replace(/^data:image\/\w+;base64,/, '');
                 return Buffer.from(base64Data, 'base64');
             }
-            if (fs_1.default.existsSync(tagValue)) {
-                try {
-                    return fs_1.default.readFileSync(tagValue);
-                }
-                catch {
-                    return null;
+            const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
+            const cleanPath = tagValue.replace(/^\/?uploads\//, '');
+            const candidatePaths = [
+                path_1.default.isAbsolute(tagValue) ? tagValue : path_1.default.join(uploadsDir, cleanPath),
+                path_1.default.join(uploadsDir, tagValue),
+                tagValue,
+            ];
+            for (const p of candidatePaths) {
+                if (fs_1.default.existsSync(p)) {
+                    try {
+                        return fs_1.default.readFileSync(p);
+                    }
+                    catch {
+                        // continue
+                    }
                 }
             }
             return null;
