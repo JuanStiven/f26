@@ -3,7 +3,7 @@ import {
   FileText,
   Users,
   Settings,
-  UserCheck,
+
   HelpCircle,
   ChevronLeft,
   ChevronRight,
