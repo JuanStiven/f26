@@ -130,8 +130,8 @@ model SignedDocument {
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  templateId String
-  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId String?
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   filledById String
   filledBy   User @relation(fields: [filledById], references: [id], onDelete: Cascade)

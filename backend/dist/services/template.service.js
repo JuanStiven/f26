@@ -12,6 +12,7 @@ exports.deleteTemplate = deleteTemplate;
 exports.getTemplateVersions = getTemplateVersions;
 exports.exportTemplateRecords = exportTemplateRecords;
 const prisma_1 = __importDefault(require("../models/prisma"));
+const client_1 = require("@prisma/client");
 async function getAllTemplates() {
     return prisma_1.default.template.findMany({
         orderBy: { createdAt: 'desc' },
@@ -121,10 +122,43 @@ async function updateTemplate(id, data) {
     });
 }
 async function deleteTemplate(id) {
-    const exists = await prisma_1.default.template.findUnique({ where: { id } });
+    const exists = await prisma_1.default.template.findUnique({
+        where: { id },
+        include: { assignedUsers: { select: { id: true } } }
+    });
     if (!exists) {
         throw { status: 404, message: 'Plantilla no encontrada.' };
     }
+    // Before deleting, ensure all related documents have a templateSnapshot
+    // so they don't lose their template info when templateId becomes null
+    const docsWithoutSnapshot = await prisma_1.default.signedDocument.findMany({
+        where: { templateId: id, templateSnapshot: { equals: client_1.Prisma.DbNull } },
+        select: { id: true }
+    });
+    if (docsWithoutSnapshot.length > 0) {
+        // Build the snapshot from the template being deleted
+        const snapshot = {
+            id: exists.id,
+            name: exists.name,
+            description: exists.description,
+            descriptionStyles: exists.descriptionStyles,
+            footer: exists.footer,
+            fields: exists.fields,
+            isQualityDocument: exists.isQualityDocument,
+            qualityCode: exists.qualityCode,
+            qualityVersion: exists.qualityVersion,
+            qualityDate: exists.qualityDate,
+            isDocxTemplate: exists.isDocxTemplate,
+            docxFilePath: exists.docxFilePath,
+            docxOriginalName: exists.docxOriginalName,
+        };
+        await prisma_1.default.signedDocument.updateMany({
+            where: { templateId: id, templateSnapshot: { equals: client_1.Prisma.DbNull } },
+            data: { templateSnapshot: snapshot }
+        });
+    }
+    // Now safely delete — onDelete: SetNull will set templateId to null
+    // on remaining documents, preserving them with their snapshot
     return prisma_1.default.template.delete({ where: { id } });
 }
 async function getTemplateVersions(templateId) {

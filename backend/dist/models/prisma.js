@@ -5,10 +5,15 @@ const client_1 = require("@prisma/client");
 const adapter_pg_1 = require("@prisma/adapter-pg");
 // Singleton de Prisma Client para evitar múltiples conexiones en desarrollo
 const globalForPrisma = globalThis;
+const pg_1 = require("pg");
 function createPrismaClient() {
-    // Extraer la URL directa de PostgreSQL desde DATABASE_URL
     const databaseUrl = process.env.DATABASE_URL || '';
-    const adapter = new adapter_pg_1.PrismaPg(databaseUrl);
+    // Configurar el pool directamente para forzar UTF8 sin romper Prisma
+    const pool = new pg_1.Pool({
+        connectionString: databaseUrl,
+        client_encoding: 'UTF8'
+    });
+    const adapter = new adapter_pg_1.PrismaPg(pool);
     return new client_1.PrismaClient({
         adapter,
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],

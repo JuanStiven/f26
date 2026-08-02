@@ -1,5 +1,7 @@
 
 
+import { resolveImageUrl } from '../utils/imageUrl';
+
 interface TemplatePreviewProps {
   body: string;
   styles?: string;
@@ -32,7 +34,8 @@ export function TemplatePreview({ body, styles, footer, className, data }: Templ
           /\.(png|jpe?g|gif|webp)$/i.test(value)
         );
         if (isImg) {
-          return `<img src="${value}" alt="${trimmedLabel}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #e5e7eb;margin:8px 0;" />`;
+          const imgSrc = resolveImageUrl(value);
+          return `<img src="${imgSrc}" alt="${trimmedLabel}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid #e5e7eb;margin:8px 0;" />`;
         }
         if (typeof value === 'string' && (value.startsWith('<') || value.includes('</') || value.includes('<br'))) {
           return value;

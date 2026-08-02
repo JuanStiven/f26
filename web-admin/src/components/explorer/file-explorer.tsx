@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { TemplatePreview } from '../TemplatePreview';
+import { resolveImageUrl } from '../../utils/imageUrl';
 import { 
   Folder, 
   FolderOpen, 
@@ -21,6 +23,9 @@ import {
 } from 'lucide-react';
 
 function getFieldTagName(field: any, allFields: any[]) {
+  if (field.tag) {
+    return field.tag.replace(/[{}]/g, '').trim();
+  }
   const hasDuplicate = allFields.some(
     (f: any) => f.id !== field.id && f.label.trim().toLowerCase() === field.label.trim().toLowerCase()
   );
@@ -1168,110 +1173,35 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                 </div>
               </div>
               
-              {/* Descripción con Variables Reemplazadas */}
+              {/* Descripción con Variables Reemplazadas (usa TemplatePreview como en Documentos Diligenciados) */}
               {(() => {
                 const description = contentModalNode.rawDoc.template?.description;
                 if (!description) return null;
-                const data = { ...contentModalNode.rawDoc.data };
+
+                const mappedData: Record<string, any> = {};
                 const fields = contentModalNode.rawDoc.template?.fields || [];
                 
-                // 1. Resolve select labels
-                Object.keys(data).forEach(key => {
-                  const fieldDef = fields.find((f: any) => f.id === key);
-                  if (fieldDef && fieldDef.type === 'select') {
-                    const option = fieldDef.options?.find((o: any) => String(o.id) === String(data[key]) || String(o.value) === String(data[key]));
-                    if (option) {
-                      data[key] = option.label || option.value;
-                    }
-                  }
-                });
-
-                // 2. Build blocks
-                let formattedDescription = description;
-                const blockTokens: any[] = [];
-                Object.keys(data).forEach(key => {
+                Object.keys(contentModalNode.rawDoc.data || {}).forEach(key => {
                   const fieldDef = fields.find((f: any) => f.id === key);
                   if (fieldDef && fieldDef.label) {
-                    const tagName = getFieldTagName(fieldDef, fields);
-                    const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const escapedLabel = fieldDef.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`{{\\s*(?:${escapedTagName}|${escapedLabel})\\s*}}`, 'gi');
-                    const value = data[key];
-                    const isImgVal = typeof value === 'string' && (
-                      value.startsWith('data:image/') ||
-                      value.startsWith('file://') ||
-                      value.startsWith('/uploads/') ||
-                      value.includes('/uploads/') ||
-                      /\.(png|jpe?g|gif|webp)$/i.test(value)
-                    );
-                    if (isImgVal) {
-                       const placeholder = `__IMAGE_BLOCK_${key}__`;
-                       if (regex.test(formattedDescription)) {
-                          formattedDescription = formattedDescription.replace(regex, placeholder);
-                          blockTokens.push({ placeholder, type: 'image', value });
-                       }
-                    } else if (Array.isArray(value)) {
-                       const placeholder = `__TABLE_BLOCK_${key}__`;
-                       if (regex.test(formattedDescription)) {
-                          formattedDescription = formattedDescription.replace(regex, placeholder);
-                          blockTokens.push({ placeholder, type: 'table', value });
-                       }
-                    } else {
-                       formattedDescription = formattedDescription.replace(regex, String(value));
+                    let val = contentModalNode.rawDoc.data[key];
+                    if (fieldDef.type === 'select') {
+                      const option = fieldDef.options?.find((o: any) => String(o.id) === String(val) || String(o.value) === String(val));
+                      if (option) val = option.label || option.value;
                     }
+                    mappedData[fieldDef.label] = val;
+                    mappedData[getFieldTagName(fieldDef, fields)] = val;
                   }
-                });
-
-                let finalBlocks: any[] = [{ type: 'text', content: formattedDescription }];
-                blockTokens.forEach(block => {
-                  let newFinalBlocks: any[] = [];
-                  finalBlocks.forEach(fb => {
-                    if (fb.type === 'text') {
-                       const parts = fb.content.split(block.placeholder);
-                       parts.forEach((part: string, idx: number) => {
-                         if (part) newFinalBlocks.push({ type: 'text', content: part });
-                         if (idx < parts.length - 1) newFinalBlocks.push(block);
-                       });
-                    } else {
-                       newFinalBlocks.push(fb);
-                    }
-                  });
-                  finalBlocks = newFinalBlocks;
                 });
 
                 return (
                   <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
-                    <div className="text-sm text-primary/80 font-medium leading-relaxed text-justify space-y-4">
-                      {finalBlocks.map((block, i) => {
-                        if (block.type === 'text') {
-                          return <span key={i} className="whitespace-pre-wrap">{block.content}</span>;
-                        } else if (block.type === 'image') {
-                          return <img key={i} src={block.value} alt="Variable Image" className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
-                        } else if (block.type === 'table') {
-                           if (block.value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
-                           const cols = Object.keys(block.value[0]);
-                           return (
-                             <div key={i} className="overflow-x-auto my-2 border border-border/40 rounded-md bg-white">
-                               <table className="w-full text-sm text-left">
-                                 <thead className="bg-muted text-muted-foreground uppercase text-xs">
-                                   <tr>
-                                     {cols.map(c => <th key={c} className="px-4 py-2 border-b border-border/40">{c}</th>)}
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {block.value.map((r: any, rIdx: number) => (
-                                     <tr key={rIdx} className="border-b border-border/20 last:border-0 hover:bg-muted/50">
-                                       {cols.map(c => <td key={c} className="px-4 py-2">{String(r[c] || '')}</td>)}
-                                     </tr>
-                                   ))}
-                                 </tbody>
-                               </table>
-                             </div>
-                           );
-                        }
-                        return null;
-                      })}
-                    </div>
+                    <TemplatePreview
+                      body={description}
+                      styles={(contentModalNode.rawDoc.template as any)?.descriptionStyles || ''}
+                      data={mappedData}
+                      className="!shadow-none [&>div]:!px-4 [&>div]:!py-4 [&>div]:!rounded-none [&>div]:!bg-transparent"
+                    />
                   </div>
                 );
               })()}
@@ -1296,7 +1226,7 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                       <span className="text-xs font-semibold text-muted-foreground">{fieldLabel}</span>
                       {isMedia ? (
                         <div className="border border-border rounded-lg overflow-hidden flex justify-center bg-muted/20 p-2">
-                           <img src={val} alt="media" className="max-h-40 object-contain rounded-md" />
+                           <img src={resolveImageUrl(val)} alt="media" className="max-h-40 object-contain rounded-md" />
                         </div>
                       ) : Array.isArray(val) ? (
                         <div className="overflow-x-auto border border-border rounded-lg mt-1">

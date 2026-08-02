@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 export declare function getAllTemplates(): Promise<({
     assignedUsers: {
         name: string;
@@ -8,7 +9,7 @@ export declare function getAllTemplates(): Promise<({
         signedDocuments: number;
     };
 } & {
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -22,7 +23,7 @@ export declare function getAllTemplates(): Promise<({
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;
@@ -32,7 +33,7 @@ export declare function getTemplatesForUser(userId: string, role: string): Promi
         signedDocuments: number;
     };
 } & {
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -46,7 +47,7 @@ export declare function getTemplatesForUser(userId: string, role: string): Promi
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;
@@ -61,17 +62,17 @@ export declare function getTemplateById(id: string): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        data: import("@prisma/client/runtime/client").JsonValue;
+        data: Prisma.JsonValue;
         photoUrl: string | null;
         signatureUrl: string | null;
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         filePath: string | null;
-        templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
+        templateSnapshot: Prisma.JsonValue | null;
         templateId: string;
         filledById: string;
     })[];
 } & {
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -85,7 +86,7 @@ export declare function getTemplateById(id: string): Promise<{
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;
@@ -117,7 +118,7 @@ export declare function createTemplate(data: {
         signedDocuments: number;
     };
 } & {
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -131,7 +132,7 @@ export declare function createTemplate(data: {
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;
@@ -163,7 +164,7 @@ export declare function updateTemplate(id: string, data: {
         signedDocuments: number;
     };
 } & {
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -177,13 +178,13 @@ export declare function updateTemplate(id: string, data: {
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;
 }>;
 export declare function deleteTemplate(id: string): Promise<{
-    fields: import("@prisma/client/runtime/client").JsonValue;
+    fields: Prisma.JsonValue;
     name: string;
     id: string;
     createdAt: Date;
@@ -197,7 +198,7 @@ export declare function deleteTemplate(id: string): Promise<{
     qualityVersion: string | null;
     qualityDate: string | null;
     isCreativeMode: boolean;
-    creativeElements: import("@prisma/client/runtime/client").JsonValue;
+    creativeElements: Prisma.JsonValue;
     isDocxTemplate: boolean;
     docxFilePath: string | null;
     docxOriginalName: string | null;

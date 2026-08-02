@@ -6,11 +6,16 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-function createPrismaClient(): PrismaClient {
-  // Extraer la URL directa de PostgreSQL desde DATABASE_URL
-  const databaseUrl = process.env.DATABASE_URL || '';
+import { Pool } from 'pg';
 
-  const adapter = new PrismaPg(databaseUrl);
+function createPrismaClient(): PrismaClient {
+  const databaseUrl = process.env.DATABASE_URL || '';
+  // Configurar el pool directamente para forzar UTF8 sin romper Prisma
+  const pool = new Pool({ 
+    connectionString: databaseUrl,
+    client_encoding: 'UTF8'
+  });
+  const adapter = new PrismaPg(pool);
 
   return new PrismaClient({
     adapter,

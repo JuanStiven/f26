@@ -1,4 +1,5 @@
 import prisma from '../models/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function getAllTemplates() {
   return prisma.template.findMany({
@@ -136,11 +137,47 @@ export async function updateTemplate(
 }
 
 export async function deleteTemplate(id: string) {
-  const exists = await prisma.template.findUnique({ where: { id } });
+  const exists = await prisma.template.findUnique({
+    where: { id },
+    include: { assignedUsers: { select: { id: true } } }
+  });
   if (!exists) {
     throw { status: 404, message: 'Plantilla no encontrada.' };
   }
 
+  // Before deleting, ensure all related documents have a templateSnapshot
+  // so they don't lose their template info when templateId becomes null
+  const docsWithoutSnapshot = await prisma.signedDocument.findMany({
+    where: { templateId: id, templateSnapshot: { equals: Prisma.DbNull } },
+    select: { id: true }
+  });
+
+  if (docsWithoutSnapshot.length > 0) {
+    // Build the snapshot from the template being deleted
+    const snapshot = {
+      id: exists.id,
+      name: exists.name,
+      description: exists.description,
+      descriptionStyles: exists.descriptionStyles,
+      footer: exists.footer,
+      fields: exists.fields,
+      isQualityDocument: exists.isQualityDocument,
+      qualityCode: exists.qualityCode,
+      qualityVersion: exists.qualityVersion,
+      qualityDate: exists.qualityDate,
+      isDocxTemplate: exists.isDocxTemplate,
+      docxFilePath: exists.docxFilePath,
+      docxOriginalName: exists.docxOriginalName,
+    };
+
+    await prisma.signedDocument.updateMany({
+      where: { templateId: id, templateSnapshot: { equals: Prisma.DbNull } },
+      data: { templateSnapshot: snapshot as any }
+    });
+  }
+
+  // Now safely delete — onDelete: SetNull will set templateId to null
+  // on remaining documents, preserving them with their snapshot
   return prisma.template.delete({ where: { id } });
 }
 
