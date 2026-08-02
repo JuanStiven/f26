@@ -7,6 +7,7 @@ import { EmployeesView } from './views/EmployeesView';
 import { FileExplorerView } from './views/FileExplorerView';
 import { SettingsView } from './views/SettingsView';
 import { TemplatePreview } from './components/TemplatePreview';
+import { resolveImageUrl } from './utils/imageUrl';
 import { 
   Trash2,
   Eye,
@@ -108,7 +109,7 @@ export function MarkdownRenderer({ text, data = {} }: { text: string, data?: Rec
              /\.(png|jpe?g|gif|webp)$/i.test(value)
            );
            if (isImgVal) {
-             return <img key={i} src={value} alt={label} className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
+             return <img key={i} src={resolveImageUrl(value)} alt={label} className="max-w-full h-auto rounded border border-border/40 block my-2" style={{ maxHeight: '200px' }} />;
            } else if (Array.isArray(value)) {
              if (value.length === 0) return <span key={i} className="italic text-muted-foreground block my-2">Tabla sin datos</span>;
              const cols = Object.keys(value[0]);
@@ -265,10 +266,9 @@ export default function App() {
       }
     }
 
-    const handleUnauthorized = (e: any) => {
+    const handleUnauthorized = () => {
       setIsAuthenticated(false);
       setCurrentUser(null);
-      alert(e.detail?.message || 'Tu sesión ha expirado o el token es inválido. Por favor inicia sesión de nuevo.');
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -1182,7 +1182,7 @@ export default function App() {
                       <span className="text-xs font-semibold text-muted-foreground">{fieldLabel}</span>
                       {isMedia ? (
                         <div className="border border-border rounded-lg overflow-hidden flex justify-center bg-muted/20 p-2">
-                           <img src={val} alt="media" className="max-h-40 object-contain rounded-md" />
+                           <img src={resolveImageUrl(val)} alt="media" className="max-h-40 object-contain rounded-md" />
                         </div>
                       ) : Array.isArray(val) ? (
                         <div className="overflow-x-auto border border-border rounded-lg mt-1">

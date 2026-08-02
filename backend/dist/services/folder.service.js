@@ -17,7 +17,15 @@ const fs_1 = __importDefault(require("fs"));
  * Listar todas las carpetas del sistema
  */
 async function getAllFolders() {
-    return prisma_1.default.folder.findMany({ orderBy: { path: 'asc' } });
+    const folders = await prisma_1.default.folder.findMany({ orderBy: { path: 'asc' } });
+    const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
+    for (const f of folders) {
+        const fullPath = path_1.default.join(uploadsDir, f.path);
+        if (!fs_1.default.existsSync(fullPath)) {
+            fs_1.default.mkdirSync(fullPath, { recursive: true });
+        }
+    }
+    return folders;
 }
 /**
  * Obtener carpeta por path

@@ -1,11 +1,11 @@
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Users, 
-  Settings, 
-  UserCheck, 
-  HelpCircle, 
-  ChevronLeft, 
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  Settings,
+  UserCheck,
+  HelpCircle,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   FolderOpen
@@ -25,7 +25,7 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
     { id: 'templates', label: 'DocBuilder (Plantillas)', icon: ClipboardList },
     { id: 'explorer', label: 'Explorador de Archivos', icon: FolderOpen },
     { id: 'users', label: 'Gestión de Empleados', icon: Users },
-    { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
+    // { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
     { id: 'documents', label: 'Documentos Diligenciados', icon: FileText },
     { id: 'admins', label: 'Usuarios (Admins)', icon: Users },
   ];
@@ -36,10 +36,9 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
   ];
 
   return (
-    <aside 
-      className={`h-screen bg-card border-r border-border flex flex-col transition-all duration-300 z-30 ${
-        collapsed ? 'w-16' : 'w-64'
-      }`}
+    <aside
+      className={`h-screen bg-card border-r border-border flex flex-col transition-all duration-300 z-30 ${collapsed ? 'w-16' : 'w-64'
+        }`}
     >
       {/* Brand Logo Header */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-border">
@@ -58,9 +57,9 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
             </div>
           )}
         </div>
-        
+
         {/* Toggle Button */}
-        <button 
+        <button
           onClick={() => setCollapsed(!collapsed)}
           className="hidden lg:flex p-1 rounded-md border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -77,11 +76,10 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
             <button
               key={item.id}
               onClick={() => setCurrentTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                active 
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary' 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${active
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
               {!collapsed && <span className="truncate">{item.label}</span>}
@@ -99,11 +97,10 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
             <button
               key={item.id}
               onClick={() => setCurrentTab(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                active 
-                  ? 'bg-primary/10 text-primary border-l-2 border-primary' 
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${active
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/80'
-              }`}
+                }`}
             >
               <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
               {!collapsed && <span className="truncate">{item.label}</span>}

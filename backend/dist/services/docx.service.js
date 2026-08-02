@@ -71,14 +71,40 @@ function generateDocxFromTemplate(templatePath, formData, fields = []) {
     }
     const content = fs_1.default.readFileSync(templatePath);
     const zip = new pizzip_1.default(content);
-    // If template XML uses <<var>> delimiters, normalize them to {{var}} inside zip document.xml files
+    // Collect tag names for image-type fields (signature, photo, image)
+    const imageFieldTags = new Set();
+    fields.forEach(field => {
+        if (field.type === 'signature' || field.type === 'photo' || field.type === 'image') {
+            // Collect all possible tag representations for this field
+            if (field.tag) {
+                const cleanTag = String(field.tag).replace(/[{}]/g, '').replace(/</g, '').replace(/>/g, '').trim();
+                imageFieldTags.add(cleanTag);
+            }
+            if (field.id)
+                imageFieldTags.add(String(field.id));
+            if (field.label)
+                imageFieldTags.add(String(field.label).trim());
+        }
+    });
+    // Pre-process XML: normalize delimiters and convert image tags to use % prefix
+    const xmlFiles = ['word/document.xml', 'word/header1.xml', 'word/header2.xml', 'word/header3.xml', 'word/footer1.xml', 'word/footer2.xml', 'word/footer3.xml'];
     try {
-        ['word/document.xml', 'word/header1.xml', 'word/header2.xml', 'word/footer1.xml', 'word/footer2.xml'].forEach(xmlFile => {
+        xmlFiles.forEach(xmlFile => {
             const fileInZip = zip.file(xmlFile);
             if (fileInZip) {
                 let xmlStr = fileInZip.asText();
-                // Replace << with {{ and >> with }}
+                // Normalize << >> to {{ }}
                 xmlStr = xmlStr.replace(/&lt;&lt;/g, '{{').replace(/&gt;&gt;/g, '}}');
+                // Convert {{tagName}} → {{%tagName}} for image-type fields
+                // This makes docxtemplater-image-module-free recognize them as image placeholders
+                imageFieldTags.forEach(tag => {
+                    // Escape regex special chars in tag name
+                    const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // Match the tag inside {{ }} even if Word XML may have split it across runs
+                    // First, try the simple case where the tag text is intact
+                    const simplePattern = new RegExp(`\\{\\{\\s*(${escaped})\\s*\\}\\}`, 'g');
+                    xmlStr = xmlStr.replace(simplePattern, '{{%$1}}');
+                });
                 zip.file(xmlFile, xmlStr);
             }
         });
@@ -86,38 +112,62 @@ function generateDocxFromTemplate(templatePath, formData, fields = []) {
     catch (e) {
         console.warn('Advertencia al normalizar delimitadores XML en DOCX:', e);
     }
+    // Transparent 1x1 PNG fallback for empty/null image values
+    const TRANSPARENT_1PX_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB' +
+        'Nl7BcQAAAABJRU5ErkJggg==', 'base64');
     const imageOptions = {
         centered: false,
         fileType: 'docx',
-        prefix: '',
-        getImage: (tagValue) => {
-            if (!tagValue || typeof tagValue !== 'string')
-                return null;
-            if (tagValue.startsWith('data:image/')) {
-                const base64Data = tagValue.replace(/^data:image\/\w+;base64,/, '');
-                return Buffer.from(base64Data, 'base64');
+        getImage: (tagValue, tagName) => {
+            if (!tagValue || typeof tagValue !== 'string' || tagValue.trim() === '') {
+                return TRANSPARENT_1PX_PNG;
             }
+            // Handle base64 data URI
+            if (tagValue.startsWith('data:image/')) {
+                const base64Data = tagValue.replace(/^data:image\/[^;]+;base64,/, '');
+                try {
+                    return Buffer.from(base64Data, 'base64');
+                }
+                catch {
+                    return TRANSPARENT_1PX_PNG;
+                }
+            }
+            // Handle file path
             const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
             const cleanPath = tagValue.replace(/^\/?uploads\//, '');
             const candidatePaths = [
-                path_1.default.isAbsolute(tagValue) ? tagValue : path_1.default.join(uploadsDir, cleanPath),
+                path_1.default.isAbsolute(cleanPath) ? cleanPath : path_1.default.join(uploadsDir, cleanPath),
+                path_1.default.join(uploadsDir, cleanPath),
                 path_1.default.join(uploadsDir, tagValue),
                 tagValue,
             ];
             for (const p of candidatePaths) {
-                if (fs_1.default.existsSync(p)) {
-                    try {
+                try {
+                    if (fs_1.default.existsSync(p) && fs_1.default.statSync(p).isFile()) {
                         return fs_1.default.readFileSync(p);
                     }
-                    catch {
-                        // continue
-                    }
+                }
+                catch {
+                    // continue
                 }
             }
-            return null;
+            // Try interpreting as raw base64 (no data URI prefix)
+            if (/^[A-Za-z0-9+/]+=*$/.test(tagValue) && tagValue.length > 20) {
+                try {
+                    return Buffer.from(tagValue, 'base64');
+                }
+                catch {
+                    // fallback
+                }
+            }
+            return TRANSPARENT_1PX_PNG;
         },
-        getSize: (_img, _tagValue, _tagName) => {
-            return [180, 70];
+        getSize: (imgBuffer, _tagValue, _tagName) => {
+            // Signature: wider; Photo: larger
+            if (imgBuffer && imgBuffer.length > 100) {
+                return [250, 100];
+            }
+            return [1, 1]; // transparent fallback: tiny
         },
     };
     const imageModule = new ImageModule(imageOptions);
@@ -147,11 +197,35 @@ function generateDocxFromTemplate(templatePath, formData, fields = []) {
         if ((field.type === 'textarea' || field.type === 'richtext') && typeof val === 'string') {
             val = cleanHtmlText(val);
         }
-        // Signature / Photo / Image base64 formatting
-        if ((field.type === 'signature' || field.type === 'photo' || field.type === 'image') && typeof val === 'string' && val.length > 50) {
-            if (!val.startsWith('data:image/') && !fs_1.default.existsSync(val)) {
-                val = `data:image/png;base64,${val}`;
+        // Signature / Photo / Image: ensure value is a data URI for the image module
+        if ((field.type === 'signature' || field.type === 'photo' || field.type === 'image') && typeof val === 'string' && val.length > 0) {
+            if (!val.startsWith('data:image/')) {
+                const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
+                const cleanPath = val.replace(/^\/?uploads\//, '');
+                const candidatePaths = [
+                    path_1.default.join(uploadsDir, cleanPath),
+                    path_1.default.join(uploadsDir, val),
+                    val,
+                ];
+                const foundPath = candidatePaths.find(p => {
+                    try {
+                        return fs_1.default.existsSync(p) && fs_1.default.statSync(p).isFile();
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+                if (foundPath) {
+                    const imgBuffer = fs_1.default.readFileSync(foundPath);
+                    const ext = path_1.default.extname(foundPath).replace('.', '') || 'png';
+                    val = `data:image/${ext};base64,${imgBuffer.toString('base64')}`;
+                }
+                else if (/^[A-Za-z0-9+/]+=*$/.test(val) && val.length > 20) {
+                    // Raw base64 without data URI prefix
+                    val = `data:image/png;base64,${val}`;
+                }
             }
+            // For image fields, the value is the data URI that getImage will process
         }
         // Table array handling: format text representation for simple tag replacement
         if ((field.type === 'table' || field.type === 'table_contents') && Array.isArray(val)) {
@@ -177,14 +251,11 @@ function generateDocxFromTemplate(templatePath, formData, fields = []) {
             data[field.label.trim()] = val;
         }
     });
-    // 2. Add all raw formData keys into data
+    // 2. Add all raw formData keys into data (for non-image fields)
     Object.entries(formData).forEach(([k, v]) => {
         let finalVal = v;
         if (typeof v === 'string' && (v.includes('<p>') || v.includes('<br>') || v.includes('<div>'))) {
             finalVal = cleanHtmlText(v);
-        }
-        else if (typeof v === 'string' && v.length > 50 && (v.startsWith('data:image/') || v.startsWith('/'))) {
-            finalVal = v;
         }
         if (data[k] === undefined || data[k] === '') {
             data[k] = finalVal ?? '';

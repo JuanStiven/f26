@@ -6,7 +6,15 @@ import fs from 'fs';
  * Listar todas las carpetas del sistema
  */
 export async function getAllFolders() {
-  return prisma.folder.findMany({ orderBy: { path: 'asc' } });
+  const folders = await prisma.folder.findMany({ orderBy: { path: 'asc' } });
+  const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+  for (const f of folders) {
+    const fullPath = path.join(uploadsDir, f.path);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
+  }
+  return folders;
 }
 
 /**
