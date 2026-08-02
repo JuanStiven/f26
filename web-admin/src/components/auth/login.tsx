@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  Eye, 
-  EyeOff, 
-  Zap, 
-  UserCheck, 
+import {
+  Eye,
+  EyeOff,
+  Zap,
+  UserCheck,
   ArrowRight,
   ShieldAlert,
   Sun,
@@ -47,10 +47,10 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
 
   return (
     <div className="min-h-screen flex bg-background text-foreground transition-colors duration-200">
-      
+
       {/* Left Panel - Branding & Features (Replicando el diseño de ispgo) */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-accent/5 border-r border-border">
-        
+
         {/* Animated Network Grid Background */}
         <div className="absolute inset-0 opacity-10 dark:opacity-25">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -79,7 +79,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
 
         {/* Branding Content */}
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          
+
           {/* Logo & Header */}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center border border-primary/20 shadow-md overflow-hidden p-1">
@@ -104,22 +104,22 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
 
             {/* Feature Cards Grid (Inspired by ispgo layout) */}
             <div className="grid grid-cols-2 gap-4">
-              <FeatureCard 
+              <FeatureCard
                 icon={<ClipboardList className="w-5 h-5 text-primary" />}
                 title="DocBuilder Dinámico"
                 description="Diseña tus propios campos e inputs fácilmente."
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Camera className="w-5 h-5 text-brand-light-blue" />}
                 title="Consentimiento"
                 description="Captura fotográfica y de firmas digitalizadas."
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<Zap className="w-5 h-5 text-accent" />}
                 title="Offline-First"
                 description="Los operarios trabajan aun sin señal de internet."
               />
-              <FeatureCard 
+              <FeatureCard
                 icon={<UserCheck className="w-5 h-5 text-brand-secondary" />}
                 title="Control de Operaciones"
                 description="Monitorea las descargas y firmas desde el mapa."
@@ -150,10 +150,10 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
 
       {/* Right Panel - Login Form */}
       <div className="w-full lg:w-1/2 flex flex-col justify-between p-8 bg-background relative">
-        
+
         {/* Theme Toggle in top right */}
         <div className="absolute top-6 right-6">
-          <button 
+          <button
             onClick={toggleTheme}
             className="p-2.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-all shadow-sm"
           >
@@ -162,7 +162,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
         </div>
 
         <div className="my-auto w-full max-w-md mx-auto space-y-8">
-          
+
           {/* Logo on mobile view only */}
           <div className="lg:hidden flex items-center gap-3 justify-center mb-6">
             <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center border border-primary/20 overflow-hidden p-1">
@@ -191,7 +191,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
               <label htmlFor="email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Usuario / Correo Electrónico
               </label>
-              <input 
+              <input
                 id="email"
                 type="email"
                 placeholder="admin@esenorte3.gov.co"
@@ -211,7 +211,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
                 <a href="#forgot" className="text-xs text-primary hover:text-accent font-medium transition-colors">¿Olvidaste tu contraseña?</a>
               </div>
               <div className="relative">
-                <input 
+                <input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
@@ -257,7 +257,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
             </button>
 
             {/* Credenciales de Demo */}
-            <div className="p-3 rounded-lg border border-border bg-muted/40 text-center space-y-1 select-none animate-in fade-in duration-300">
+            {/* <div className="p-3 rounded-lg border border-border bg-muted/40 text-center space-y-1 select-none animate-in fade-in duration-300">
               <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Credenciales de Demo</p>
               <div className="flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 text-[11px] text-foreground font-mono">
                 <div>
@@ -275,7 +275,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
                 </div>
               </div>
               <p className="text-[9px] text-muted-foreground/80 italic font-sans">(Haz clic en ellas para autorellenar)</p>
-            </div>
+            </div> */}
           </form>
 
         </div>
@@ -293,7 +293,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
             <span>Latencia DB: 8ms</span>
           </div>
           <div className="mt-1 font-medium text-[10px] text-muted-foreground/80">
-            © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo <br className="sm:hidden" /><br/>juanstiven.developer@gmail.com
+            © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo <br className="sm:hidden" /><br />juanstiven.developer@gmail.com
           </div>
         </div>
 

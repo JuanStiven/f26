@@ -1,14 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  KeyboardAvoidingView, 
-  Platform, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Alert,
   Modal,
@@ -76,13 +76,13 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userToken, setUserToken] = useState<string | null>(null);
-  
+
   // Login Form States
   const [docNumber, setDocNumber] = useState('');
   const [pinCode, setPinCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  
+
   // App Navigation States
   const [currentScreen, setCurrentScreen] = useState<'dashboard' | 'templates' | 'offline_docs' | 'fill_form' | 'history' | 'view_document' | 'drafts'>('dashboard');
   const [isOnline, setIsOnline] = useState(true);
@@ -195,15 +195,15 @@ export default function App() {
       Alert.alert('Info', 'No hay documentos pendientes por sincronizar.');
       return;
     }
-    
+
     let successCount = 0;
     const remainingDocs = [];
-    
+
     for (const doc of offlineDocs) {
       try {
         const userToken = await AsyncStorage.getItem('@userToken');
         const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
-        
+
         const response = await fetch(`${API_URL}/documents`, {
           method: 'POST',
           headers: {
@@ -215,7 +215,7 @@ export default function App() {
             formData: doc.data
           })
         });
-        
+
         const resData = await response.json();
         if (resData.success) {
           successCount++;
@@ -226,10 +226,10 @@ export default function App() {
         remainingDocs.push(doc);
       }
     }
-    
+
     await AsyncStorage.setItem('@offline_docs_' + currentUser?.id, JSON.stringify(remainingDocs));
     setOfflineDocs(remainingDocs);
-    
+
     if (successCount > 0) {
       Alert.alert('Sincronización', `Se sincronizaron ${successCount} documento(s) correctamente.`);
       fetchHistory();
@@ -242,12 +242,12 @@ export default function App() {
     if (!selectedTemplate) return;
     try {
       let newDrafts = [...drafts];
-      
+
       if (activeDraftId) {
         // Update existing draft
-        newDrafts = newDrafts.map(d => 
-          d.id === activeDraftId 
-            ? { ...d, data: formData, savedAt: new Date().toISOString() } 
+        newDrafts = newDrafts.map(d =>
+          d.id === activeDraftId
+            ? { ...d, data: formData, savedAt: new Date().toISOString() }
             : d
         );
       } else {
@@ -342,7 +342,7 @@ export default function App() {
       // Determinar la URL correcta dependiendo del entorno (Emulador Android vs Web/iOS)
       // Usamos la IP de la máquina de desarrollo porque un celular físico no entiende "localhost"
       const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
-      
+
       const response = await fetch(`${API_URL}/auth/login/employee`, {
         method: 'POST',
         headers: {
@@ -592,7 +592,7 @@ export default function App() {
 
       const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(?:{{\\s*${escapedLabel}\\s*}}|{\\s*${escapedLabel}\\s*}|<<\\s*${escapedLabel}\\s*>>)`, 'gi');
-      
+
       const isImgVal = typeof value === 'string' && (
         value.startsWith('data:image/') ||
         value.startsWith('file://') ||
@@ -629,7 +629,7 @@ export default function App() {
     const renderInlineHtml = (html: string, baseKey: string): React.ReactNode[] => {
       const elements: React.ReactNode[] = [];
       let cleaned = html.replace(/<\/?(?:p|div|br)[^>]*>/gi, ' ');
-      
+
       // Check for block placeholders (images/tables)
       for (const bt of blockTokens) {
         if (cleaned.includes(bt.placeholder)) {
@@ -722,7 +722,7 @@ export default function App() {
 
     // Parse HTML block elements
     const blocks: React.ReactNode[] = [];
-    
+
     // Remove list wrappers, normalize
     let htmlContent = processed
       .replace(/<\/?ul[^>]*>/gi, '')
@@ -844,7 +844,7 @@ export default function App() {
         // Default: <p> tag
         const inlineElements = renderInlineHtml(content, key);
         // Check if it contains block elements (images/tables)
-        const hasBlockElements = inlineElements.some((el: any) => 
+        const hasBlockElements = inlineElements.some((el: any) =>
           el?.type === View || el?.type === Image
         );
         if (hasBlockElements) {
@@ -893,14 +893,14 @@ export default function App() {
         if (field.required) {
           const value = formData[field.id];
           let isEmpty = false;
-          
+
           if (value === undefined || value === null) {
             isEmpty = true;
           } else if (field.type === 'table') {
             if (!Array.isArray(value) || value.length === 0) {
               isEmpty = true;
             } else {
-              const allRowsEmpty = value.every((row: any) => 
+              const allRowsEmpty = value.every((row: any) =>
                 Object.values(row).every((cellVal: any) => String(cellVal || '').trim() === '')
               );
               if (allRowsEmpty) {
@@ -917,7 +917,7 @@ export default function App() {
               isEmpty = true;
             }
           }
-          
+
           if (isEmpty) {
             missingFields.push(field.label);
           }
@@ -946,11 +946,11 @@ export default function App() {
           formData: formData
         })
       });
-      
+
       const data = await response.json();
       if (data.success) {
         Alert.alert('¡Éxito!', 'Documento guardado y sincronizado exitosamente.');
-        
+
         // Si venía de un borrador, lo eliminamos porque ya se completó y guardó
         if (activeDraftId) {
           deleteDraft(activeDraftId);
@@ -967,7 +967,7 @@ export default function App() {
     } catch (error) {
       console.error('Error saving document:', error);
       Alert.alert('Modo Offline', 'No se pudo conectar con el servidor. El documento se ha guardado localmente y podrás sincronizarlo luego.');
-      
+
       saveOfflineDoc({
         id: Date.now().toString(),
         template: selectedTemplate,
@@ -990,28 +990,28 @@ export default function App() {
 
   const handleTakePhoto = async (fieldId: string) => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-    
+
     if (permissionResult.granted === false) {
       Alert.alert("Permiso Denegado", "Se requieren permisos de cámara para tomar fotos.");
       return;
     }
-    
+
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
       quality: 0.5,
       base64: true,
     });
-    
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      setFormData((prev: any) => ({...prev, [fieldId]: base64Image}));
+      setFormData((prev: any) => ({ ...prev, [fieldId]: base64Image }));
     }
   };
 
   const handleSignatureOK = (signature: string) => {
     if (activeSignatureFieldId) {
-      setFormData((prev: any) => ({...prev, [activeSignatureFieldId]: signature}));
+      setFormData((prev: any) => ({ ...prev, [activeSignatureFieldId]: signature }));
     }
     setSignatureModalVisible(false);
     setActiveSignatureFieldId(null);
@@ -1024,15 +1024,15 @@ export default function App() {
       '¿Estás seguro de que deseas salir del sistema?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Sí, Salir', 
+        {
+          text: 'Sí, Salir',
           style: 'destructive',
           onPress: () => {
             setIsAuthenticated(false);
             setCurrentUser(null);
             setUserToken(null);
             setCurrentScreen('dashboard');
-          } 
+          }
         }
       ]
     );
@@ -1046,85 +1046,85 @@ export default function App() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.keyboardContainer}
           >
-          <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-            {/* Header / Logo */}
-            <View style={styles.logoContainer}>
-              <View style={[styles.logoBadge, { backgroundColor: '#ffffff', overflow: 'hidden', padding: 5, width: 90, height: 90, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }]}>
-                <Image source={require('./assets/logo_es.png')} style={{ width: '90%', height: '90%', resizeMode: 'contain' }} />
-              </View>
-              <Text style={styles.logoTitle}>ESE NORTE 3</Text>
-              <Text style={styles.logoSubtitle}>Servicio humanizado y de calidad</Text>
-              <Text style={styles.logoSlogan}>"Le ponemos Corazón"</Text>
-            </View>
-
-            {/* Login Card */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Ingreso para Empleados</Text>
-              <Text style={styles.cardInstruction}>Introduce tu cédula y PIN de acceso operacional.</Text>
-
-              {errorMessage ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{errorMessage}</Text>
+            <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+              {/* Header / Logo */}
+              <View style={styles.logoContainer}>
+                <View style={[styles.logoBadge, { backgroundColor: '#ffffff', overflow: 'hidden', padding: 5, width: 90, height: 90, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }]}>
+                  <Image source={require('./assets/logo_es.png')} style={{ width: '90%', height: '90%', resizeMode: 'contain' }} />
                 </View>
-              ) : null}
-
-              {/* Input Cédula */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Cédula de Ciudadanía</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 1098765432"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={docNumber}
-                  onChangeText={(txt) => {
-                    setDocNumber(txt);
-                    if (errorMessage) setErrorMessage('');
-                  }}
-                />
+                <Text style={styles.logoTitle}>ESE NORTE 3</Text>
+                <Text style={styles.logoSubtitle}>Servicio humanizado y de calidad</Text>
+                <Text style={styles.logoSlogan}>"Le ponemos Corazón"</Text>
               </View>
 
-              {/* Input PIN */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>PIN de Acceso (4 dígitos)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. 1234"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  secureTextEntry={true}
-                  maxLength={4}
-                  value={pinCode}
-                  onChangeText={(txt) => {
-                    setPinCode(txt);
-                    if (errorMessage) setErrorMessage('');
-                  }}
-                />
+              {/* Login Card */}
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Ingreso para Empleados</Text>
+                <Text style={styles.cardInstruction}>Introduce tu cédula y PIN de acceso operacional.</Text>
+
+                {errorMessage ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>{errorMessage}</Text>
+                  </View>
+                ) : null}
+
+                {/* Input Cédula */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Cédula de Ciudadanía</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej. 1098765432"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    value={docNumber}
+                    onChangeText={(txt) => {
+                      setDocNumber(txt);
+                      if (errorMessage) setErrorMessage('');
+                    }}
+                  />
+                </View>
+
+                {/* Input PIN */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>PIN de Acceso (4 dígitos)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej. 1234"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="numeric"
+                    secureTextEntry={true}
+                    maxLength={4}
+                    value={pinCode}
+                    onChangeText={(txt) => {
+                      setPinCode(txt);
+                      if (errorMessage) setErrorMessage('');
+                    }}
+                  />
+                </View>
+
+                {/* Botón Ingresar */}
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonPrimary, isLoading && styles.buttonDisabled]}
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.buttonText}>Iniciar Sesión</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Indicador de estado offline */}
+                <View style={styles.offlineAlert}>
+                  <Text style={styles.offlineAlertText}>
+                    🛡️ Login Offline habilitado si ya iniciaste sesión anteriormente.
+                  </Text>
+                </View>
               </View>
 
-              {/* Botón Ingresar */}
-              <TouchableOpacity 
-                style={[styles.button, styles.buttonPrimary, isLoading && styles.buttonDisabled]} 
-                onPress={handleLogin}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Text style={styles.buttonText}>Iniciar Sesión</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Indicador de estado offline */}
-              <View style={styles.offlineAlert}>
-                <Text style={styles.offlineAlertText}>
-                  🛡️ Login Offline habilitado si ya iniciaste sesión anteriormente.
-                </Text>
-              </View>
-            </View>
-
-            {/* Quick Access Credentials Box */}
-            <View style={styles.quickAccessBox}>
+              {/* Quick Access Credentials Box */}
+              {/* <View style={styles.quickAccessBox}>
               <Text style={styles.quickAccessTitle}>ACCESO RÁPIDO (DEMO)</Text>
               <Text style={styles.quickAccessSubtitle}>Toca a un operario para completar sus datos:</Text>
               
@@ -1145,14 +1145,14 @@ export default function App() {
                   <Text style={styles.quickAccessRole}>Enfermera | Pin: 5678</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </View> */}
 
-            <View style={{ marginTop: 20, alignItems: 'center' }}>
-              <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 'bold' }}>
-                © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo{"\n"}
-              </Text>
-            </View>
-            
+              <View style={{ marginTop: 20, alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 'bold' }}>
+                  © {new Date().getFullYear()} Stiven Gonzalez - Gloria al nombre de Jesucristo{"\n"}
+                </Text>
+              </View>
+
             </ScrollView>
           </KeyboardAvoidingView>
           <StatusBar style="light" />
@@ -1169,228 +1169,228 @@ export default function App() {
           {/* Header App */}
           <View style={styles.header}>
             <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>ESE Norte 3</Text>
-            <Text style={styles.headerSubtitle}>Portal de Operaciones</Text>
+              <Text style={styles.headerTitle}>ESE Norte 3</Text>
+              <Text style={styles.headerSubtitle}>Portal de Operaciones</Text>
+            </View>
+            {/* Status de Red Interactivo */}
+            <TouchableOpacity
+              style={[styles.networkBadge, isOnline ? styles.networkBadgeOnline : styles.networkBadgeOffline]}
+              onPress={() => setIsOnline(!isOnline)}
+            >
+              <Text style={styles.networkBadgeText}>
+                {isOnline ? '🟢 Online' : '🔴 Offline Mode'}
+              </Text>
+            </TouchableOpacity>
           </View>
-          {/* Status de Red Interactivo */}
-          <TouchableOpacity 
-            style={[styles.networkBadge, isOnline ? styles.networkBadgeOnline : styles.networkBadgeOffline]}
-            onPress={() => setIsOnline(!isOnline)}
+
+          {/* User Card */}
+          <View style={styles.userCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{currentUser?.name.substring(0, 2).toUpperCase()}</Text>
+            </View>
+            <View style={styles.userDetails}>
+              <Text style={styles.userName}>{currentUser?.name}</Text>
+              <Text style={styles.userRole}>{currentUser?.position || currentUser?.role}</Text>
+              <Text style={styles.userDoc}>C.C. {currentUser?.document || currentUser?.doc}</Text>
+            </View>
+          </View>
+
+          {/* Content Screens */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 200 : 120}
           >
-            <Text style={styles.networkBadgeText}>
-              {isOnline ? '🟢 Online' : '🔴 Offline Mode'}
-            </Text>
-          </TouchableOpacity>
+            <ScrollView style={styles.mainContent} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+              {currentScreen === 'dashboard' && (
+                <HomeScreen
+                  onNavigate={(screen) => setCurrentScreen(screen)}
+                  onLogout={handleLogout}
+                  styles={styles}
+                />
+              )}
+
+              {currentScreen === 'templates' && (
+                <TemplatesScreen
+                  loadingTemplates={loadingTemplates}
+                  paginatedTemplates={paginatedTemplates}
+                  templateSearchTerm={templateSearchTerm}
+                  setTemplateSearchTerm={setTemplateSearchTerm}
+                  templatePage={templatePage}
+                  setTemplatePage={setTemplatePage}
+                  totalTemplatePages={totalTemplatePages}
+                  fetchTemplates={fetchTemplates}
+                  onSelectTemplate={(template) => {
+                    setSelectedTemplate(template);
+                    setFormData({});
+                    setActiveDraftId(null);
+                    setCurrentScreen('fill_form');
+                  }}
+                  onBack={() => setCurrentScreen('dashboard')}
+                  styles={styles}
+                />
+              )}
+
+              {currentScreen === 'fill_form' && selectedTemplate && (
+                <FillFormScreen
+                  selectedTemplate={selectedTemplate}
+                  formData={formData}
+                  setFormData={setFormData}
+                  showDocumentPreview={showDocumentPreview}
+                  setShowDocumentPreview={setShowDocumentPreview}
+                  renderRichDescription={renderRichDescription}
+                  showDatePicker={showDatePicker}
+                  setShowDatePicker={setShowDatePicker}
+                  parseDateString={parseDateString}
+                  formatDate={formatDate}
+                  handleTakePhoto={handleTakePhoto}
+                  setActiveSignatureFieldId={setActiveSignatureFieldId}
+                  setSignatureModalVisible={setSignatureModalVisible}
+                  setActiveRichTextFieldId={setActiveRichTextFieldId}
+                  setActiveRichTextLabel={setActiveRichTextLabel}
+                  setTempRichTextHtml={setTempRichTextHtml}
+                  setInitialRichTextHtml={setInitialRichTextHtml}
+                  setRichTextModalVisible={setRichTextModalVisible}
+                  handleSaveDocument={handleSaveDocument}
+                  saveDraft={saveDraft}
+                  onBack={() => setCurrentScreen('templates')}
+                  styles={styles}
+                />
+              )}
+
+              {currentScreen === 'offline_docs' && (
+                <OfflineDocsScreen
+                  paginatedOffline={paginatedOffline}
+                  offlineSearchTerm={offlineSearchTerm}
+                  setOfflineSearchTerm={setOfflineSearchTerm}
+                  offlinePage={offlinePage}
+                  setOfflinePage={setOfflinePage}
+                  totalOfflinePages={totalOfflinePages}
+                  isOnline={isOnline}
+                  loadOfflineDocs={loadOfflineDocs}
+                  syncOfflineDocs={syncOfflineDocs}
+                  onBack={() => setCurrentScreen('dashboard')}
+                  styles={styles}
+                />
+              )}
+
+              {currentScreen === 'drafts' && (
+                <DraftsScreen
+                  paginatedDrafts={paginatedDrafts}
+                  draftSearchTerm={draftSearchTerm}
+                  setDraftSearchTerm={setDraftSearchTerm}
+                  draftPage={draftPage}
+                  setDraftPage={setDraftPage}
+                  totalDraftPages={totalDraftPages}
+                  loadDrafts={loadDrafts}
+                  onSelectDraft={(draft) => {
+                    setSelectedTemplate(draft.template);
+                    setFormData(draft.data || {});
+                    setActiveDraftId(draft.id);
+                    setCurrentScreen('fill_form');
+                  }}
+                  onDeleteDraft={deleteDraft}
+                  onBack={() => setCurrentScreen('dashboard')}
+                  styles={styles}
+                />
+              )}
+
+              {(currentScreen === 'history' || currentScreen === 'view_document') && (
+                <HistoryScreen
+                  currentScreen={currentScreen}
+                  loadingHistory={loadingHistory}
+                  paginatedHistory={paginatedHistory}
+                  historySearchTerm={historySearchTerm}
+                  setHistorySearchTerm={setHistorySearchTerm}
+                  historyPage={historyPage}
+                  setHistoryPage={setHistoryPage}
+                  totalHistoryPages={totalHistoryPages}
+                  fetchHistory={fetchHistory}
+                  selectedDocument={selectedDocument}
+                  onSelectDocument={(doc) => {
+                    setSelectedDocument(doc);
+                    setCurrentScreen('view_document');
+                  }}
+                  renderRichDescription={renderRichDescription}
+                  onBackToDashboard={() => setCurrentScreen('dashboard')}
+                  onBackToHistory={() => setCurrentScreen('history')}
+                  styles={styles}
+                />
+              )}
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
 
-        {/* User Card */}
-        <View style={styles.userCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{currentUser?.name.substring(0,2).toUpperCase()}</Text>
-          </View>
-          <View style={styles.userDetails}>
-            <Text style={styles.userName}>{currentUser?.name}</Text>
-            <Text style={styles.userRole}>{currentUser?.position || currentUser?.role}</Text>
-            <Text style={styles.userDoc}>C.C. {currentUser?.document || currentUser?.doc}</Text>
-          </View>
-        </View>
+        <Modal visible={richTextModalVisible} animationType="slide" transparent={true} onRequestClose={() => setRichTextModalVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ width: '95%', height: '85%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
+              <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => {
+                  setRichTextModalVisible(false);
+                  setActiveRichTextFieldId(null);
+                  setTempRichTextHtml('');
+                  setInitialRichTextHtml('');
+                }}>
+                  <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
+                </TouchableOpacity>
 
-        {/* Content Screens */}
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 200 : 120}
-        >
-        <ScrollView style={styles.mainContent} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
-          {currentScreen === 'dashboard' && (
-            <HomeScreen
-              onNavigate={(screen) => setCurrentScreen(screen)}
-              onLogout={handleLogout}
-              styles={styles}
-            />
-          )}
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{activeRichTextLabel}</Text>
 
-          {currentScreen === 'templates' && (
-            <TemplatesScreen
-              loadingTemplates={loadingTemplates}
-              paginatedTemplates={paginatedTemplates}
-              templateSearchTerm={templateSearchTerm}
-              setTemplateSearchTerm={setTemplateSearchTerm}
-              templatePage={templatePage}
-              setTemplatePage={setTemplatePage}
-              totalTemplatePages={totalTemplatePages}
-              fetchTemplates={fetchTemplates}
-              onSelectTemplate={(template) => {
-                setSelectedTemplate(template);
-                setFormData({});
-                setActiveDraftId(null);
-                setCurrentScreen('fill_form');
-              }}
-              onBack={() => setCurrentScreen('dashboard')}
-              styles={styles}
-            />
-          )}
-
-          {currentScreen === 'fill_form' && selectedTemplate && (
-            <FillFormScreen
-              selectedTemplate={selectedTemplate}
-              formData={formData}
-              setFormData={setFormData}
-              showDocumentPreview={showDocumentPreview}
-              setShowDocumentPreview={setShowDocumentPreview}
-              renderRichDescription={renderRichDescription}
-              showDatePicker={showDatePicker}
-              setShowDatePicker={setShowDatePicker}
-              parseDateString={parseDateString}
-              formatDate={formatDate}
-              handleTakePhoto={handleTakePhoto}
-              setActiveSignatureFieldId={setActiveSignatureFieldId}
-              setSignatureModalVisible={setSignatureModalVisible}
-              setActiveRichTextFieldId={setActiveRichTextFieldId}
-              setActiveRichTextLabel={setActiveRichTextLabel}
-              setTempRichTextHtml={setTempRichTextHtml}
-              setInitialRichTextHtml={setInitialRichTextHtml}
-              setRichTextModalVisible={setRichTextModalVisible}
-              handleSaveDocument={handleSaveDocument}
-              saveDraft={saveDraft}
-              onBack={() => setCurrentScreen('templates')}
-              styles={styles}
-            />
-          )}
-
-          {currentScreen === 'offline_docs' && (
-            <OfflineDocsScreen
-              paginatedOffline={paginatedOffline}
-              offlineSearchTerm={offlineSearchTerm}
-              setOfflineSearchTerm={setOfflineSearchTerm}
-              offlinePage={offlinePage}
-              setOfflinePage={setOfflinePage}
-              totalOfflinePages={totalOfflinePages}
-              isOnline={isOnline}
-              loadOfflineDocs={loadOfflineDocs}
-              syncOfflineDocs={syncOfflineDocs}
-              onBack={() => setCurrentScreen('dashboard')}
-              styles={styles}
-            />
-          )}
-
-          {currentScreen === 'drafts' && (
-            <DraftsScreen
-              paginatedDrafts={paginatedDrafts}
-              draftSearchTerm={draftSearchTerm}
-              setDraftSearchTerm={setDraftSearchTerm}
-              draftPage={draftPage}
-              setDraftPage={setDraftPage}
-              totalDraftPages={totalDraftPages}
-              loadDrafts={loadDrafts}
-              onSelectDraft={(draft) => {
-                setSelectedTemplate(draft.template);
-                setFormData(draft.data || {});
-                setActiveDraftId(draft.id);
-                setCurrentScreen('fill_form');
-              }}
-              onDeleteDraft={deleteDraft}
-              onBack={() => setCurrentScreen('dashboard')}
-              styles={styles}
-            />
-          )}
-
-          {(currentScreen === 'history' || currentScreen === 'view_document') && (
-            <HistoryScreen
-              currentScreen={currentScreen}
-              loadingHistory={loadingHistory}
-              paginatedHistory={paginatedHistory}
-              historySearchTerm={historySearchTerm}
-              setHistorySearchTerm={setHistorySearchTerm}
-              historyPage={historyPage}
-              setHistoryPage={setHistoryPage}
-              totalHistoryPages={totalHistoryPages}
-              fetchHistory={fetchHistory}
-              selectedDocument={selectedDocument}
-              onSelectDocument={(doc) => {
-                setSelectedDocument(doc);
-                setCurrentScreen('view_document');
-              }}
-              renderRichDescription={renderRichDescription}
-              onBackToDashboard={() => setCurrentScreen('dashboard')}
-              onBackToHistory={() => setCurrentScreen('history')}
-              styles={styles}
-            />
-          )}
-        </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-
-      <Modal visible={richTextModalVisible} animationType="slide" transparent={true} onRequestClose={() => setRichTextModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: '95%', height: '85%', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
-            <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <TouchableOpacity onPress={() => {
-                setRichTextModalVisible(false);
-                setActiveRichTextFieldId(null);
-                setTempRichTextHtml('');
-                setInitialRichTextHtml('');
-              }}>
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>{activeRichTextLabel}</Text>
-              
-              <TouchableOpacity onPress={() => {
-                if (activeRichTextFieldId) {
-                  setFormData((prev: any) => ({ ...prev, [activeRichTextFieldId]: tempRichTextHtml }));
-                }
-                setRichTextModalVisible(false);
-                setActiveRichTextFieldId(null);
-                setTempRichTextHtml('');
-                setInitialRichTextHtml('');
-              }}>
-                <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Listo</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ flex: 1 }}>
-              <WebView
-                source={{ html: getRichEditorHtml(initialRichTextHtml) }}
-                onMessage={(event) => {
-                  setTempRichTextHtml(event.nativeEvent.data);
-                }}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                originWhitelist={['*']}
-                style={{ flex: 1 }}
-              />
+                <TouchableOpacity onPress={() => {
+                  if (activeRichTextFieldId) {
+                    setFormData((prev: any) => ({ ...prev, [activeRichTextFieldId]: tempRichTextHtml }));
+                  }
+                  setRichTextModalVisible(false);
+                  setActiveRichTextFieldId(null);
+                  setTempRichTextHtml('');
+                  setInitialRichTextHtml('');
+                }}>
+                  <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Listo</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1 }}>
+                <WebView
+                  source={{ html: getRichEditorHtml(initialRichTextHtml) }}
+                  onMessage={(event) => {
+                    setTempRichTextHtml(event.nativeEvent.data);
+                  }}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                  originWhitelist={['*']}
+                  style={{ flex: 1 }}
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <Modal visible={signatureModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSignatureModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: '95%', height: 450, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
-            <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <TouchableOpacity onPress={() => {
-                setSignatureModalVisible(false);
-                setActiveSignatureFieldId(null);
-              }}>
-                <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity onPress={() => signatureRef.current?.clearSignature()}>
-                <Text style={{ color: '#FCD34D', fontWeight: 'bold' }}>Limpiar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity onPress={() => {
-                signatureRef.current?.readSignature();
-              }}>
-                <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Guardar</Text>
-              </TouchableOpacity>
-            </View>
-            <SignatureScreen
-              ref={signatureRef}
-              onOK={handleSignatureOK}
-              onEmpty={() => Alert.alert('Error', 'Por favor, dibuja una firma antes de guardar.')}
-              descriptionText="Dibuja tu firma arriba"
-              webStyle={`
+        <Modal visible={signatureModalVisible} animationType="slide" transparent={true} onRequestClose={() => setSignatureModalVisible(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ width: '95%', height: 450, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden' }}>
+              <View style={{ padding: 16, backgroundColor: '#004F9F', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => {
+                  setSignatureModalVisible(false);
+                  setActiveSignatureFieldId(null);
+                }}>
+                  <Text style={{ color: 'white', fontWeight: 'bold' }}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => signatureRef.current?.clearSignature()}>
+                  <Text style={{ color: '#FCD34D', fontWeight: 'bold' }}>Limpiar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => {
+                  signatureRef.current?.readSignature();
+                }}>
+                  <Text style={{ color: '#10B981', fontWeight: 'bold' }}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+              <SignatureScreen
+                ref={signatureRef}
+                onOK={handleSignatureOK}
+                onEmpty={() => Alert.alert('Error', 'Por favor, dibuja una firma antes de guardar.')}
+                descriptionText="Dibuja tu firma arriba"
+                webStyle={`
                 .m-signature-pad {
                   box-shadow: none; border: none;
                 }
@@ -1402,12 +1402,12 @@ export default function App() {
                   margin: 0px;
                 }
               `}
-            />
+              />
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      <StatusBar style="dark" />
+        <StatusBar style="dark" />
       </SafeAreaView>
     </SafeAreaProvider>
   );
