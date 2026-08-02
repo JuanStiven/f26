@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../models/prisma';
 import { getParam } from '../middlewares/helpers';
 
-const prisma = new PrismaClient();
 const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
 
 // ─── Público: última versión activa (para la app móvil) ───

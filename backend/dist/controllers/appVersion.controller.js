@@ -10,14 +10,13 @@ exports.setActive = setActive;
 exports.remove = remove;
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
-const client_1 = require("@prisma/client");
+const prisma_1 = __importDefault(require("../models/prisma"));
 const helpers_1 = require("../middlewares/helpers");
-const prisma = new client_1.PrismaClient();
 const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
 // ─── Público: última versión activa (para la app móvil) ───
 async function getLatest(_req, res) {
     try {
-        const latest = await prisma.appVersion.findFirst({
+        const latest = await prisma_1.default.appVersion.findFirst({
             where: { isActive: true },
             orderBy: { versionCode: 'desc' },
         });
@@ -34,7 +33,7 @@ async function getLatest(_req, res) {
 // ─── Admin: listar todas las versiones ───
 async function getAll(_req, res) {
     try {
-        const versions = await prisma.appVersion.findMany({
+        const versions = await prisma_1.default.appVersion.findMany({
             orderBy: { versionCode: 'desc' },
         });
         res.json({ success: true, data: versions });
@@ -61,11 +60,11 @@ async function create(req, res) {
         }
         const apkPath = `/uploads/apk/${file.filename}`;
         // Desactivar versiones anteriores para que "latest" sea la nueva
-        await prisma.appVersion.updateMany({
+        await prisma_1.default.appVersion.updateMany({
             where: { isActive: true },
             data: { isActive: false },
         });
-        const version = await prisma.appVersion.create({
+        const version = await prisma_1.default.appVersion.create({
             data: {
                 versionCode: parseInt(String(versionCode), 10),
                 versionName: String(versionName),
@@ -89,12 +88,12 @@ async function setActive(req, res) {
         const isActive = body.isActive === true || body.isActive === 'true';
         if (isActive) {
             // Al activar una, desactivar las demás
-            await prisma.appVersion.updateMany({
+            await prisma_1.default.appVersion.updateMany({
                 where: { isActive: true },
                 data: { isActive: false },
             });
         }
-        const version = await prisma.appVersion.update({
+        const version = await prisma_1.default.appVersion.update({
             where: { id },
             data: { isActive },
         });
@@ -108,7 +107,7 @@ async function setActive(req, res) {
 async function remove(req, res) {
     try {
         const id = (0, helpers_1.getParam)(req, 'id');
-        const version = await prisma.appVersion.findUnique({ where: { id } });
+        const version = await prisma_1.default.appVersion.findUnique({ where: { id } });
         if (version) {
             // Eliminar archivo físico si existe
             const fileName = path_1.default.basename(version.apkPath);
@@ -116,7 +115,7 @@ async function remove(req, res) {
             if (fs_1.default.existsSync(filePath)) {
                 fs_1.default.unlinkSync(filePath);
             }
-            await prisma.appVersion.delete({ where: { id } });
+            await prisma_1.default.appVersion.delete({ where: { id } });
         }
         res.json({ success: true, message: 'Versión eliminada.' });
     }
