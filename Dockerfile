@@ -32,8 +32,10 @@ COPY --from=backend-builder /app/package*.json ./
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=backend-builder /app/prisma ./prisma
-COPY --from=backend-builder /app/uploads ./uploads
 COPY --from=backend-builder /app/prisma.config.ts ./
+
+# Uploads dir is created at runtime by the backend (and persisted via volume)
+RUN mkdir -p /app/uploads
 
 # Copy built frontend assets to nginx public folder
 COPY --from=frontend-builder /app/dist /usr/share/nginx/html
