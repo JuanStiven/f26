@@ -5,7 +5,7 @@ export declare function getAllDocuments(): Promise<{
         description: string;
         descriptionStyles: string;
         storagePath: string;
-    };
+    } | null;
     templateSnapshot: undefined;
     filledBy: {
         name: string;
@@ -19,7 +19,7 @@ export declare function getAllDocuments(): Promise<{
     signatureUrl: string | null;
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }[]>;
 export declare function getDocumentsByUserId(userId: string): Promise<{
@@ -28,7 +28,7 @@ export declare function getDocumentsByUserId(userId: string): Promise<{
         name: string;
         description: string;
         descriptionStyles: string;
-    };
+    } | null;
     templateSnapshot: undefined;
     id: string;
     createdAt: Date;
@@ -38,7 +38,7 @@ export declare function getDocumentsByUserId(userId: string): Promise<{
     signatureUrl: string | null;
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }[]>;
 export declare function getDocumentById(id: string): Promise<{
@@ -61,7 +61,7 @@ export declare function getDocumentById(id: string): Promise<{
         isDocxTemplate: boolean;
         docxFilePath: string | null;
         docxOriginalName: string | null;
-    };
+    } | null;
     templateSnapshot: undefined;
     filledBy: {
         name: string;
@@ -76,7 +76,7 @@ export declare function getDocumentById(id: string): Promise<{
     signatureUrl: string | null;
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }>;
 export declare function createDocument(data: {
@@ -88,7 +88,7 @@ export declare function createDocument(data: {
 }): Promise<{
     template: {
         name: string;
-    };
+    } | null;
     filledBy: {
         name: string;
     };
@@ -102,7 +102,7 @@ export declare function createDocument(data: {
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
     templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }>;
 export declare function updateSyncStatus(id: string, syncStatus: 'SYNCED' | 'PENDING' | 'OFFLINE'): Promise<{
@@ -115,7 +115,7 @@ export declare function updateSyncStatus(id: string, syncStatus: 'SYNCED' | 'PEN
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
     templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }>;
 export declare function deleteDocument(id: string): Promise<{
@@ -128,6 +128,6 @@ export declare function deleteDocument(id: string): Promise<{
     syncStatus: import(".prisma/client").$Enums.SyncStatus;
     filePath: string | null;
     templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
-    templateId: string;
+    templateId: string | null;
     filledById: string;
 }>;

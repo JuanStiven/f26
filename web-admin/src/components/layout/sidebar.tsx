@@ -3,7 +3,7 @@ import {
   FileText,
   Users,
   Settings,
-
+  Smartphone,
   HelpCircle,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +28,7 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
     // { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
     { id: 'documents', label: 'Documentos Diligenciados', icon: FileText },
     { id: 'admins', label: 'Usuarios (Admins)', icon: Users },
+    { id: 'appversions', label: 'Versiones de la App', icon: Smartphone },
   ];
 
   const bottomItems = [

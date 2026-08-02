@@ -6,6 +6,7 @@ import { TemplatesView } from './views/TemplatesView';
 import { EmployeesView } from './views/EmployeesView';
 import { FileExplorerView } from './views/FileExplorerView';
 import { SettingsView } from './views/SettingsView';
+import { AppVersionsView } from './views/AppVersionsView';
 import { TemplatePreview } from './components/TemplatePreview';
 import { resolveImageUrl } from './utils/imageUrl';
 import { 
@@ -709,6 +710,10 @@ export default function App() {
           companySettings={companySettings}
           setCompanySettings={setCompanySettings}
         />
+      )}
+
+      {currentTab === 'appversions' && (
+        <AppVersionsView />
       )}
 
       {/* Modal para Eliminar Plantilla */}

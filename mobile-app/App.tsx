@@ -27,13 +27,14 @@ import { FillFormScreen } from './src/screens/FillFormScreen';
 import { OfflineDocsScreen } from './src/screens/OfflineDocsScreen';
 import { DraftsScreen } from './src/screens/DraftsScreen';
 import { HistoryScreen } from './src/screens/HistoryScreen';
+import { checkForAppUpdates } from './src/services/update.service';
 
 const getImageUri = (uri: string) => {
   if (!uri || typeof uri !== 'string') return uri;
   if (uri.startsWith('data:image/') || uri.startsWith('file://') || uri.startsWith('http://') || uri.startsWith('https://')) {
     return uri;
   }
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
   const baseUrl = API_URL.replace('/api', '');
   const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
   return `${baseUrl}${cleanPath}`;
@@ -146,6 +147,11 @@ export default function App() {
   const totalOfflinePages = Math.ceil(filteredOffline.length / OFFLINE_PER_PAGE);
   const paginatedOffline = filteredOffline.slice((offlinePage - 1) * OFFLINE_PER_PAGE, offlinePage * OFFLINE_PER_PAGE);
 
+  // Verificar actualizaciones de la app al iniciar (una vez por sesión)
+  React.useEffect(() => {
+    checkForAppUpdates();
+  }, []);
+
   React.useEffect(() => {
     if (isAuthenticated && userToken) {
       fetchTemplates();
@@ -202,7 +208,7 @@ export default function App() {
     for (const doc of offlineDocs) {
       try {
         const userToken = await AsyncStorage.getItem('@userToken');
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+        const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
 
         const response = await fetch(`${API_URL}/documents`, {
           method: 'POST',
@@ -291,7 +297,7 @@ export default function App() {
     if (!userToken) return;
     setLoadingHistory(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
       const response = await fetch(`${API_URL}/documents/history`, {
         headers: { 'Authorization': `Bearer ${userToken}` }
       });
@@ -310,7 +316,7 @@ export default function App() {
     if (!userToken) return;
     setLoadingTemplates(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
       const response = await fetch(`${API_URL}/templates`, {
         headers: {
           'Authorization': `Bearer ${userToken}`,
@@ -341,7 +347,7 @@ export default function App() {
     try {
       // Determinar la URL correcta dependiendo del entorno (Emulador Android vs Web/iOS)
       // Usamos la IP de la máquina de desarrollo porque un celular físico no entiende "localhost"
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
 
       const response = await fetch(`${API_URL}/auth/login/employee`, {
         method: 'POST',
@@ -934,7 +940,7 @@ export default function App() {
     }
 
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
       const response = await fetch(`${API_URL}/documents`, {
         method: 'POST',
         headers: {

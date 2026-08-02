@@ -15,6 +15,7 @@ import senderRoutes from './routes/sender.routes';
 import documentRoutes from './routes/document.routes';
 import folderRoutes from './routes/folder.routes';
 import companyRoutes from './routes/company.routes';
+import appVersionRoutes from './routes/appVersion.routes';
 
 // Importar seed
 import { seedDatabase } from './services/seed.service';
@@ -52,6 +53,7 @@ app.use('/api/senders', senderRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/company', companyRoutes);
+app.use('/api/app-versions', appVersionRoutes);
 
 // ─── Manejo de errores global ────────────────────────
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

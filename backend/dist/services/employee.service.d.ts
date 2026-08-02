@@ -22,7 +22,7 @@ export declare function getEmployeeById(id: string): Promise<{
     signedDocuments: ({
         template: {
             name: string;
-        };
+        } | null;
     } & {
         id: string;
         createdAt: Date;
@@ -33,7 +33,7 @@ export declare function getEmployeeById(id: string): Promise<{
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         filePath: string | null;
         templateSnapshot: import("@prisma/client/runtime/client").JsonValue | null;
-        templateId: string;
+        templateId: string | null;
         filledById: string;
     })[];
 }>;

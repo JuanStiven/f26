@@ -151,3 +151,19 @@ model Folder {
 
   @@map("folders")
 }
+
+// ─── Versiones de la App Móvil ───────────────────────
+model AppVersion {
+  id          String   @id @default(uuid())
+  versionCode Int      // Código numérico de la versión (debe incrementar)
+  versionName String   // Nombre visible: "1.0.0"
+  apkPath     String   // Ruta del APK: /uploads/apk/xxx.apk
+  apkSize     Int?     // Tamaño en bytes
+  changelog   String?  // Notas de la versión
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_versions")
+}

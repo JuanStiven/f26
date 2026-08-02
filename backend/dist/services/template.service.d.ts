@@ -68,7 +68,7 @@ export declare function getTemplateById(id: string): Promise<{
         syncStatus: import(".prisma/client").$Enums.SyncStatus;
         filePath: string | null;
         templateSnapshot: Prisma.JsonValue | null;
-        templateId: string;
+        templateId: string | null;
         filledById: string;
     })[];
 } & {

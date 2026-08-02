@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "mobile-app",
+    "name": "ESE Norte 3",
     "slug": "mobile-app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -10,13 +10,18 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.esenorte3.formatos",
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -28,6 +33,14 @@
         {
           "photosPermission": "La aplicación necesita acceso a tus fotos para adjuntar evidencias.",
           "cameraPermission": "La aplicación necesita acceso a tu cámara para tomar fotos como evidencia."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ]

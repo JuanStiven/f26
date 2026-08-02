@@ -9,7 +9,7 @@ const getImageUri = (uri: string) => {
   if (uri.startsWith('data:image/') || uri.startsWith('file://') || uri.startsWith('http://') || uri.startsWith('https://')) {
     return uri;
   }
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.110.160:3000/api';
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://formatos.esenorte3.lat/api';
   const baseUrl = API_URL.replace('/api', '');
   const cleanPath = uri.startsWith('/') ? uri : `/${uri}`;
   return `${baseUrl}${cleanPath}`;

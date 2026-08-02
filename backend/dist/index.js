@@ -18,6 +18,7 @@ const sender_routes_1 = __importDefault(require("./routes/sender.routes"));
 const document_routes_1 = __importDefault(require("./routes/document.routes"));
 const folder_routes_1 = __importDefault(require("./routes/folder.routes"));
 const company_routes_1 = __importDefault(require("./routes/company.routes"));
+const appVersion_routes_1 = __importDefault(require("./routes/appVersion.routes"));
 // Importar seed
 const seed_service_1 = require("./services/seed.service");
 const app = (0, express_1.default)();
@@ -49,6 +50,7 @@ app.use('/api/senders', sender_routes_1.default);
 app.use('/api/documents', document_routes_1.default);
 app.use('/api/folders', folder_routes_1.default);
 app.use('/api/company', company_routes_1.default);
+app.use('/api/app-versions', appVersion_routes_1.default);
 // ─── Manejo de errores global ────────────────────────
 app.use((err, _req, res, _next) => {
     console.error('❌ Error no controlado:', err.message);
