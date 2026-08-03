@@ -1056,7 +1056,7 @@ export default function App() {
               {/* Header / Logo */}
               <View style={styles.logoContainer}>
                 <View style={[styles.logoBadge, { backgroundColor: '#ffffff', overflow: 'hidden', padding: 5, width: 90, height: 90, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }]}>
-                  <Image source={require('./assets/logo_es.png')} style={{ width: '90%', height: '90%', resizeMode: 'contain' }} />
+                  <Image source={require('./assets/logo_f26.png')} style={{ width: '90%', height: '90%', resizeMode: 'contain' }} />
                 </View>
                 <Text style={styles.logoTitle}>ESE NORTE 3</Text>
                 <Text style={styles.logoSubtitle}>Servicio humanizado y de calidad</Text>
