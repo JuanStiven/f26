@@ -19,7 +19,9 @@ export function DashboardView({
   onSelectTab,
   onViewDocument,
 }: DashboardViewProps) {
-  const activeEmployees = employees.filter((e) => e.status === 'Activo');
+  // Solo cuentan los usuarios con rol EMPLOYEE (excluye ADMIN/SUPER_ADMIN que también
+  // vienen en GET /employees y tienen status 'Activo')
+  const activeEmployees = employees.filter((e) => e.role === 'EMPLOYEE' && e.status === 'Activo');
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

@@ -83,10 +83,10 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
           {/* Logo & Header */}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center border border-primary/20 shadow-md overflow-hidden p-1">
-              <img src="/logo_es.png" alt="ESE Norte 3 Logo" className="w-full h-full object-contain" />
+              <img src="/logo_f26.png" alt="ESE Norte 3 Logo" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">ESE NORTE 3</h1>
+              <h1 className="text-xl font-bold text-foreground">F26</h1>
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Documentación Digital</p>
             </div>
           </div>
@@ -169,7 +169,7 @@ export function LoginPage({ onLogin, theme, toggleTheme }: LoginProps) {
               <img src="/logo_es.png" alt="ESE Norte 3 Logo" className="w-full h-full object-contain" />
             </div>
             <div className="text-left">
-              <h1 className="text-xl font-bold text-foreground">ESE NORTE 3</h1>
+              <h1 className="text-xl font-bold text-foreground">F26</h1>
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Documentación Digital</p>
             </div>
           </div>

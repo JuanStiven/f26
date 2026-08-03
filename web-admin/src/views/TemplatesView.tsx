@@ -291,6 +291,7 @@ interface TemplatesViewProps {
   onExportTemplate: (template: Template) => void;
   getFieldTagName: (field: TemplateField, fieldsList: TemplateField[]) => string;
   updateDescriptionTags: (oldFields: TemplateField[], newFields: TemplateField[], htmlContent: string) => string;
+  currentRole?: string;
 }
 
 export function TemplatesView({
@@ -328,7 +329,9 @@ export function TemplatesView({
   onExportTemplate,
   getFieldTagName,
   updateDescriptionTags,
+  currentRole,
 }: TemplatesViewProps) {
+  const canDeleteTemplates = currentRole === 'SUPER_ADMIN';
   const richEditorRef = React.useRef<RichTextEditorRef>(null);
   const richFooterRef = React.useRef<RichTextEditorRef>(null);
   const [templateSearchTerm, setTemplateSearchTerm] = useState('');
@@ -1030,13 +1033,15 @@ export function TemplatesView({
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
-                  <button
-                    onClick={() => onDeleteTemplate(t)}
-                    className="p-1.5 rounded hover:bg-muted text-destructive"
-                    title="Eliminar Plantilla"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {canDeleteTemplates && (
+                    <button
+                      onClick={() => onDeleteTemplate(t)}
+                      className="p-1.5 rounded hover:bg-muted text-destructive"
+                      title="Eliminar Plantilla"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

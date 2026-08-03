@@ -55,9 +55,12 @@ interface FileExplorerProps {
   folders: any[];
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  currentRole?: string;
 }
 
-export function FileExplorer({ templates, signedDocuments, folders, onRefresh, isRefreshing }: FileExplorerProps) {
+export function FileExplorer({ templates, signedDocuments, folders, onRefresh, isRefreshing, currentRole }: FileExplorerProps) {
+  // Solo el SUPER_ADMIN puede eliminar elementos (CRUD completo); el ADMIN tiene CRU sin delete
+  const canDelete = currentRole === 'SUPER_ADMIN';
   // Estado de los nodos
   const [nodes, setNodes] = useState<FileNode[]>([]);
   const [contentModalNode, setContentModalNode] = useState<FileNode | null>(null);
@@ -530,16 +533,18 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
               >
                 <Edit2 className="h-3 w-3" />
               </button>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteNode(node);
-                }}
-                title="Eliminar"
-                className="p-0.5 rounded hover:bg-muted-foreground/20 text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
+              {canDelete && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteNode(node);
+                  }}
+                  title="Eliminar"
+                  className="p-0.5 rounded hover:bg-muted-foreground/20 text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -814,13 +819,15 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                                     >
                                       <Move className="h-3.5 w-3.5" />
                                     </button>
-                                    <button 
-                                      onClick={() => handleDeleteNode(node)}
-                                      className="p-1 rounded hover:bg-muted text-destructive"
-                                      title="Eliminar"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    {canDelete && (
+                                      <button 
+                                        onClick={() => handleDeleteNode(node)}
+                                        className="p-1 rounded hover:bg-muted text-destructive"
+                                        title="Eliminar"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -945,16 +952,18 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                           
                           <div className="h-px bg-border my-1" />
                           
-                          <button 
-                            onClick={() => {
-                              setActionsDropdownOpen(false);
-                              handleDeleteNode(currentNode);
-                            }}
-                            className="px-3 py-2 hover:bg-destructive/10 text-destructive text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Eliminar
-                          </button>
+                          {canDelete && (
+                            <button 
+                              onClick={() => {
+                                setActionsDropdownOpen(false);
+                                handleDeleteNode(currentNode);
+                              }}
+                              className="px-3 py-2 hover:bg-destructive/10 text-destructive text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </>
                     )}

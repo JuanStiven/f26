@@ -1055,10 +1055,10 @@ export default function App() {
             <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
               {/* Header / Logo */}
               <View style={styles.logoContainer}>
-                <View style={[styles.logoBadge, { backgroundColor: '#ffffff', overflow: 'hidden', padding: 5, width: 90, height: 90, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }]}>
-                  <Image source={require('./assets/logo_f26.png')} style={{ width: '90%', height: '90%', resizeMode: 'contain' }} />
+                <View style={[styles.logoBadge, { backgroundColor: '#ffffff', overflow: 'hidden', padding: 5, width: 110, height: 110, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }]}>
+                  <Image source={require('./assets/logo_f26_cropped.png')} style={{ width: '100%', height: '100%', resizeMode: 'contain' }} />
                 </View>
-                <Text style={styles.logoTitle}>ESE NORTE 3</Text>
+                <Text style={styles.logoTitle}>F26</Text>
                 <Text style={styles.logoSubtitle}>Servicio humanizado y de calidad</Text>
                 <Text style={styles.logoSlogan}>"Le ponemos Corazón"</Text>
               </View>
@@ -1175,7 +1175,7 @@ export default function App() {
           {/* Header App */}
           <View style={styles.header}>
             <View style={styles.headerInfo}>
-              <Text style={styles.headerTitle}>ESE Norte 3</Text>
+              <Text style={styles.headerTitle}>F26</Text>
               <Text style={styles.headerSubtitle}>Portal de Operaciones</Text>
             </View>
             {/* Status de Red Interactivo */}

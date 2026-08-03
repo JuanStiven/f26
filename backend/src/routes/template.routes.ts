@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as templateController from '../controllers/template.controller';
-import { authenticate, requireAdmin, requireEmployee } from '../middlewares/auth.middleware';
+import { authenticate, requireAdmin, requireEmployee, requireSuperAdmin } from '../middlewares/auth.middleware';
 import { uploadDocx } from '../middlewares/upload.middleware';
 
 const router = Router();
@@ -26,7 +26,7 @@ router.post('/', authenticate, requireAdmin, templateController.create);
 // Actualizar plantilla (solo admin)
 router.put('/:id', authenticate, requireAdmin, templateController.update);
 
-// Eliminar plantilla (solo admin)
-router.delete('/:id', authenticate, requireAdmin, templateController.remove);
+// Eliminar plantilla (solo super admin)
+router.delete('/:id', authenticate, requireSuperAdmin, templateController.remove);
 
 export default router;

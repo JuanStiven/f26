@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import * as documentController from '../controllers/document.controller';
-import { authenticate, requireAdmin, requireEmployee } from '../middlewares/auth.middleware';
+import { authenticate, requireAdmin, requireEmployee, requireSuperAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -19,7 +19,7 @@ router.post('/', authenticate, requireEmployee, documentController.create);
 // Actualizar estado de sincronización
 router.patch('/:id/sync', authenticate, requireEmployee, documentController.updateSync);
 
-// Eliminar documento (solo admin)
-router.delete('/:id', authenticate, requireAdmin, documentController.remove);
+// Eliminar documento (solo super admin)
+router.delete('/:id', authenticate, requireSuperAdmin, documentController.remove);
 
 export default router;

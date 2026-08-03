@@ -675,6 +675,7 @@ export default function App() {
           onExportTemplate={handleOpenExportModal}
           getFieldTagName={getFieldTagName}
           updateDescriptionTags={updateDescriptionTags}
+          currentRole={currentUser?.role}
         />
       )}
       {(currentTab === 'explorer' || currentTab === 'documents') && (
@@ -685,6 +686,7 @@ export default function App() {
           folders={folders}
           onRefresh={fetchData}
           isRefreshing={isRefreshing}
+          currentRole={currentUser?.role}
           onViewDocument={(doc) => setDocumentModal(doc)}
         />
       )}

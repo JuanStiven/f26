@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { FileExplorer } from '../components/explorer/file-explorer';
-import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Eye, FileDown, RefreshCw } from 'lucide-react';
+import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Eye, FileDown, RefreshCw, Trash2 } from 'lucide-react';
 
 interface FileExplorerViewProps {
   currentTab: 'explorer' | 'documents' | string;
@@ -9,6 +9,7 @@ interface FileExplorerViewProps {
   folders: any[];
   onRefresh: () => void;
   isRefreshing: boolean;
+  currentRole?: string;
   onViewDocument: (doc: any) => void;
 }
 
@@ -19,8 +20,10 @@ export function FileExplorerView({
   folders,
   onRefresh,
   isRefreshing,
+  currentRole,
   onViewDocument,
 }: FileExplorerViewProps) {
+  const canDelete = currentRole === 'SUPER_ADMIN';
   const [docSearchTerm, setDocSearchTerm] = useState('');
   const [docCurrentPage, setDocCurrentPage] = useState(1);
   const [docSortConfig, setDocSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -76,6 +79,7 @@ export function FileExplorerView({
         folders={folders}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
+        currentRole={currentRole}
       />
     );
   }
@@ -189,6 +193,24 @@ export function FileExplorerView({
                       >
                         <FileDown className="h-4 w-4" />
                       </button>
+                      {canDelete && (
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`¿Eliminar el documento "${doc.template?.name || 'Documento'}"? Esta acción no se puede deshacer.`)) return;
+                            try {
+                              const { default: api } = await import('../utils/api');
+                              await api.delete(`/documents/${doc.id}`);
+                              onRefresh();
+                            } catch (error: any) {
+                              alert(error.response?.data?.message || 'Error eliminando el documento');
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-muted text-destructive"
+                          title="Eliminar documento"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
