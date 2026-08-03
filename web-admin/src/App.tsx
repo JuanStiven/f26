@@ -286,6 +286,14 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'SUPER_ADMIN') {
+      if (currentTab === 'admins' || currentTab === 'appversions') {
+        setCurrentTab('dashboard');
+      }
+    }
+  }, [currentUser, currentTab]);
+
 
 
   const toggleTheme = () => {
@@ -712,7 +720,7 @@ export default function App() {
         />
       )}
 
-      {currentTab === 'appversions' && (
+      {currentTab === 'appversions' && currentUser?.role === 'SUPER_ADMIN' && (
         <AppVersionsView />
       )}
 

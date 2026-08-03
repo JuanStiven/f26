@@ -7,7 +7,7 @@ export declare function loginAdmin(email: string, password: string): Promise<{
         id: string;
         name: string;
         email: string | null;
-        role: "ADMIN";
+        role: import(".prisma/client").$Enums.Role;
         document: string;
     };
 }>;

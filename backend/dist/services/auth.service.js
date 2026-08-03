@@ -14,7 +14,7 @@ const prisma_1 = __importDefault(require("../models/prisma"));
  */
 async function loginAdmin(email, password) {
     const user = await prisma_1.default.user.findUnique({ where: { email } });
-    if (!user || user.role !== 'ADMIN') {
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
         throw { status: 401, message: 'Credenciales inválidas.' };
     }
     const isValid = await bcryptjs_1.default.compare(password, user.password);

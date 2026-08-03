@@ -1,15 +1,17 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Singleton de Prisma Client para evitar múltiples conexiones en desarrollo
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-import { Pool } from 'pg';
-
 function createPrismaClient(): PrismaClient {
-  const databaseUrl = process.env.DATABASE_URL || '';
+  const databaseUrl = process.env.DATABASE_URL || 'postgresql://admin:adminpassword@localhost:5432/ops_documents?schema=public';
   // Configurar el pool directamente para forzar UTF8 sin romper Prisma
   const pool = new Pool({ 
     connectionString: databaseUrl,

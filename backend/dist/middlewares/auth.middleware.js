@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authenticate = authenticate;
 exports.requireAdmin = requireAdmin;
+exports.requireSuperAdmin = requireSuperAdmin;
 exports.requireEmployee = requireEmployee;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 /**
@@ -30,22 +31,33 @@ function authenticate(req, res, next) {
     }
 }
 /**
- * Middleware que verifica que el usuario tiene el rol de ADMIN.
+ * Middleware que verifica que el usuario tiene el rol de ADMIN o SUPER_ADMIN.
  * Debe usarse DESPUÉS de `authenticate`.
  */
 function requireAdmin(req, res, next) {
-    if (!req.user || req.user.role !== 'ADMIN') {
+    if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN')) {
         res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol de Administrador.' });
         return;
     }
     next();
 }
 /**
- * Middleware que permite acceso a ADMIN o EMPLOYEE.
+ * Middleware que verifica que el usuario tiene el rol de SUPER_ADMIN.
+ * Debe usarse DESPUÉS de `authenticate`.
+ */
+function requireSuperAdmin(req, res, next) {
+    if (!req.user || req.user.role !== 'SUPER_ADMIN') {
+        res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol de Super Administrador.' });
+        return;
+    }
+    next();
+}
+/**
+ * Middleware que permite acceso a SUPER_ADMIN, ADMIN o EMPLOYEE.
  * Debe usarse DESPUÉS de `authenticate`.
  */
 function requireEmployee(req, res, next) {
-    if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'EMPLOYEE')) {
+    if (!req.user || (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'ADMIN' && req.user.role !== 'EMPLOYEE')) {
         res.status(403).json({ success: false, message: 'Acceso denegado.' });
         return;
     }

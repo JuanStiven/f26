@@ -30,6 +30,7 @@ export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleT
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           companySettings={companySettings}
+          currentUser={currentUser}
         />
       </div>
 
@@ -50,6 +51,7 @@ export function MainLayout({ children, currentTab, setCurrentTab, theme, toggleT
                 setMobileMenuOpen(false);
               }}
               companySettings={companySettings}
+              currentUser={currentUser}
             />
           </div>
         </div>

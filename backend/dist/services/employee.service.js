@@ -11,8 +11,18 @@ exports.deleteEmployee = deleteEmployee;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const prisma_1 = __importDefault(require("../models/prisma"));
 async function getAllEmployees(role) {
+    let whereClause = undefined;
+    if (role === 'ADMIN') {
+        whereClause = { role: { in: ['ADMIN', 'SUPER_ADMIN'] } };
+    }
+    else if (role === 'EMPLOYEE') {
+        whereClause = { role: 'EMPLOYEE' };
+    }
+    else if (role) {
+        whereClause = { role: role };
+    }
     return prisma_1.default.user.findMany({
-        where: role ? { role: role } : undefined,
+        where: whereClause,
         select: {
             id: true,
             name: true,
@@ -37,6 +47,7 @@ async function getEmployeeById(id) {
             document: true,
             position: true,
             status: true,
+            role: true,
             createdAt: true,
             signedDocuments: {
                 include: { template: { select: { name: true } } },
@@ -63,13 +74,14 @@ async function createEmployee(data) {
         }
     }
     const hashedPin = await bcryptjs_1.default.hash(data.pin, 10);
+    const userRole = data.role || 'EMPLOYEE';
     return prisma_1.default.user.create({
         data: {
             name: data.name,
             document: data.document,
             password: hashedPin,
-            role: data.role || 'EMPLOYEE',
-            position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
+            role: userRole,
+            position: data.position || (userRole === 'SUPER_ADMIN' ? 'Super Administrador' : userRole === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
             status: 'Activo',
             email: data.email || null,
         },
@@ -85,10 +97,21 @@ async function createEmployee(data) {
         },
     });
 }
-async function updateEmployee(id, data) {
+async function updateEmployee(id, data, requester) {
     const exists = await prisma_1.default.user.findUnique({ where: { id } });
     if (!exists) {
         throw { status: 404, message: 'Empleado no encontrado.' };
+    }
+    if (requester) {
+        const isTargetAdmin = exists.role === 'ADMIN' || exists.role === 'SUPER_ADMIN';
+        const isSelf = requester.userId === id;
+        const isSuper = requester.role === 'SUPER_ADMIN';
+        if (isTargetAdmin && !isSelf && !isSuper) {
+            throw { status: 403, message: 'Un Administrador no puede actualizar la información o contraseña de otro Administrador.' };
+        }
+        if (data.role && (data.role === 'ADMIN' || data.role === 'SUPER_ADMIN') && !isSuper) {
+            throw { status: 403, message: 'Sólo el Super Administrador puede asignar roles administrativos.' };
+        }
     }
     if (data.email && data.email !== exists.email) {
         const emailExists = await prisma_1.default.user.findUnique({ where: { email: data.email } });
@@ -123,13 +146,20 @@ async function updateEmployee(id, data) {
         },
     });
 }
-async function deleteEmployee(id) {
+async function deleteEmployee(id, requester) {
     const exists = await prisma_1.default.user.findUnique({
         where: { id },
         include: { _count: { select: { signedDocuments: true } } }
     });
     if (!exists) {
         throw { status: 404, message: 'Empleado no encontrado.' };
+    }
+    if (requester) {
+        const isTargetAdmin = exists.role === 'ADMIN' || exists.role === 'SUPER_ADMIN';
+        const isSuper = requester.role === 'SUPER_ADMIN';
+        if (isTargetAdmin && !isSuper) {
+            throw { status: 403, message: 'Un Administrador no puede borrar a otro Administrador.' };
+        }
     }
     if (exists._count.signedDocuments > 0) {
         throw { status: 400, message: 'No se puede eliminar el empleado porque tiene documentos firmados asociados.' };

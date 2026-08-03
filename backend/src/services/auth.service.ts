@@ -9,7 +9,7 @@ import { AuthPayload } from '../middlewares/auth.middleware';
 export async function loginAdmin(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (!user || user.role !== 'ADMIN') {
+  if (!user || ((user.role as string) !== 'ADMIN' && (user.role as string) !== 'SUPER_ADMIN')) {
     throw { status: 401, message: 'Credenciales inválidas.' };
   }
 

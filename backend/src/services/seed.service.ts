@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../models/prisma';
+import { Role } from '@prisma/client';
 
 /**
  * Seed de desarrollo: Crea datos iniciales si la BD está vacía.
@@ -7,6 +8,19 @@ import prisma from '../models/prisma';
  */
 export async function seedDatabase() {
   try {
+    // Asegurar que existe al menos un SUPER_ADMIN
+    const superAdminCount = await prisma.user.count({ where: { role: ('SUPER_ADMIN' as Role) } });
+    if (superAdminCount === 0) {
+      const firstAdmin = await prisma.user.findFirst({ where: { role: ('ADMIN' as Role) } });
+      if (firstAdmin) {
+        await prisma.user.update({
+          where: { id: firstAdmin.id },
+          data: { role: ('SUPER_ADMIN' as Role), position: 'Super Administrador del Sistema' }
+        });
+        console.log(`  👑 Usuario admin "${firstAdmin.email || firstAdmin.name}" fue promovido a SUPER_ADMIN.`);
+      }
+    }
+
     // Verificar si ya hay datos
     const userCount = await prisma.user.count();
     if (userCount > 0) {
@@ -16,7 +30,7 @@ export async function seedDatabase() {
 
     console.log('🌱 Ejecutando seed de desarrollo...');
 
-    // ─── 1. Crear Admin ──────────────────────────────
+    // ─── 1. Crear Super Admin ─────────────────────────
     const adminPassword = await bcrypt.hash('admin123', 10);
     const admin = await prisma.user.create({
       data: {
@@ -24,12 +38,12 @@ export async function seedDatabase() {
         email: 'admin@esenorte3.gov.co',
         document: '1000000001',
         password: adminPassword,
-        role: 'ADMIN',
+        role: 'SUPER_ADMIN' as Role,
         status: 'Activo',
-        position: 'Administrador del Sistema',
+        position: 'Super Administrador del Sistema',
       },
     });
-    console.log('  ✅ Admin creado:', admin.email);
+    console.log('  ✅ Super Admin creado:', admin.email);
 
     // ─── 2. Crear Empleados ──────────────────────────
     const pin1 = await bcrypt.hash('1234', 10);

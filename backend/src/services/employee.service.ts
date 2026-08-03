@@ -1,9 +1,19 @@
 import bcrypt from 'bcryptjs';
 import prisma from '../models/prisma';
+import { Role } from '@prisma/client';
 
 export async function getAllEmployees(role?: string) {
+  let whereClause: any = undefined;
+  if (role === 'ADMIN') {
+    whereClause = { role: { in: ['ADMIN', 'SUPER_ADMIN'] } };
+  } else if (role === 'EMPLOYEE') {
+    whereClause = { role: 'EMPLOYEE' };
+  } else if (role) {
+    whereClause = { role: role as any };
+  }
+
   return prisma.user.findMany({
-    where: role ? { role: role as 'ADMIN' | 'EMPLOYEE' } : undefined,
+    where: whereClause,
     select: {
       id: true,
       name: true,
@@ -29,6 +39,7 @@ export async function getEmployeeById(id: string) {
       document: true,
       position: true,
       status: true,
+      role: true,
       createdAt: true,
       signedDocuments: {
         include: { template: { select: { name: true } } },
@@ -50,7 +61,7 @@ export async function createEmployee(data: {
   document: string;
   pin: string;
   position?: string;
-  role?: string;
+  role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
   email?: string;
 }) {
   // Verificar duplicado de cédula
@@ -67,14 +78,15 @@ export async function createEmployee(data: {
   }
 
   const hashedPin = await bcrypt.hash(data.pin, 10);
+  const userRole = data.role || 'EMPLOYEE';
 
   return prisma.user.create({
     data: {
       name: data.name,
       document: data.document,
       password: hashedPin,
-      role: (data.role as 'ADMIN' | 'EMPLOYEE') || 'EMPLOYEE',
-      position: data.position || (data.role === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
+      role: userRole as Role,
+      position: data.position || (userRole === 'SUPER_ADMIN' ? 'Super Administrador' : userRole === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
       status: 'Activo',
       email: data.email || null,
     },
@@ -93,11 +105,26 @@ export async function createEmployee(data: {
 
 export async function updateEmployee(
   id: string,
-  data: { name?: string; position?: string; status?: string; pin?: string; role?: string; email?: string }
+  data: { name?: string; position?: string; status?: string; pin?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE'; email?: string },
+  requester?: { userId: string; role: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE' }
 ) {
   const exists = await prisma.user.findUnique({ where: { id } });
   if (!exists) {
     throw { status: 404, message: 'Empleado no encontrado.' };
+  }
+
+  if (requester) {
+    const isTargetAdmin = (exists.role as string) === 'ADMIN' || (exists.role as string) === 'SUPER_ADMIN';
+    const isSelf = requester.userId === id;
+    const isSuper = requester.role === 'SUPER_ADMIN';
+
+    if (isTargetAdmin && !isSelf && !isSuper) {
+      throw { status: 403, message: 'Un Administrador no puede actualizar la información o contraseña de otro Administrador.' };
+    }
+
+    if (data.role && (data.role === 'ADMIN' || data.role === 'SUPER_ADMIN') && !isSuper) {
+      throw { status: 403, message: 'Sólo el Super Administrador puede asignar roles administrativos.' };
+    }
   }
 
   if (data.email && data.email !== exists.email) {
@@ -111,7 +138,7 @@ export async function updateEmployee(
   if (data.name) updateData.name = data.name;
   if (data.position) updateData.position = data.position;
   if (data.status) updateData.status = data.status;
-  if (data.role) updateData.role = data.role as 'ADMIN' | 'EMPLOYEE';
+  if (data.role) updateData.role = data.role as Role;
   if (data.email !== undefined) updateData.email = data.email || null;
   if (data.pin) updateData.password = await bcrypt.hash(data.pin, 10);
 
@@ -130,7 +157,10 @@ export async function updateEmployee(
   });
 }
 
-export async function deleteEmployee(id: string) {
+export async function deleteEmployee(
+  id: string,
+  requester?: { userId: string; role: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE' }
+) {
   const exists = await prisma.user.findUnique({ 
     where: { id },
     include: { _count: { select: { signedDocuments: true } } }
@@ -138,6 +168,15 @@ export async function deleteEmployee(id: string) {
   
   if (!exists) {
     throw { status: 404, message: 'Empleado no encontrado.' };
+  }
+
+  if (requester) {
+    const isTargetAdmin = (exists.role as string) === 'ADMIN' || (exists.role as string) === 'SUPER_ADMIN';
+    const isSuper = requester.role === 'SUPER_ADMIN';
+
+    if (isTargetAdmin && !isSuper) {
+      throw { status: 403, message: 'Un Administrador no puede borrar a otro Administrador.' };
+    }
   }
 
   if (exists._count.signedDocuments > 0) {

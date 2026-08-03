@@ -12,6 +12,18 @@ const prisma_1 = __importDefault(require("../models/prisma"));
  */
 async function seedDatabase() {
     try {
+        // Asegurar que existe al menos un SUPER_ADMIN
+        const superAdminCount = await prisma_1.default.user.count({ where: { role: 'SUPER_ADMIN' } });
+        if (superAdminCount === 0) {
+            const firstAdmin = await prisma_1.default.user.findFirst({ where: { role: 'ADMIN' } });
+            if (firstAdmin) {
+                await prisma_1.default.user.update({
+                    where: { id: firstAdmin.id },
+                    data: { role: 'SUPER_ADMIN', position: 'Super Administrador del Sistema' }
+                });
+                console.log(`  👑 Usuario admin "${firstAdmin.email || firstAdmin.name}" fue promovido a SUPER_ADMIN.`);
+            }
+        }
         // Verificar si ya hay datos
         const userCount = await prisma_1.default.user.count();
         if (userCount > 0) {
@@ -19,7 +31,7 @@ async function seedDatabase() {
             return;
         }
         console.log('🌱 Ejecutando seed de desarrollo...');
-        // ─── 1. Crear Admin ──────────────────────────────
+        // ─── 1. Crear Super Admin ─────────────────────────
         const adminPassword = await bcryptjs_1.default.hash('admin123', 10);
         const admin = await prisma_1.default.user.create({
             data: {
@@ -27,12 +39,12 @@ async function seedDatabase() {
                 email: 'admin@esenorte3.gov.co',
                 document: '1000000001',
                 password: adminPassword,
-                role: 'ADMIN',
+                role: 'SUPER_ADMIN',
                 status: 'Activo',
-                position: 'Administrador del Sistema',
+                position: 'Super Administrador del Sistema',
             },
         });
-        console.log('  ✅ Admin creado:', admin.email);
+        console.log('  ✅ Super Admin creado:', admin.email);
         // ─── 2. Crear Empleados ──────────────────────────
         const pin1 = await bcryptjs_1.default.hash('1234', 10);
         const pin2 = await bcryptjs_1.default.hash('5678', 10);

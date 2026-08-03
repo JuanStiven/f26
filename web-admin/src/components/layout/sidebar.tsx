@@ -17,9 +17,12 @@ interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
   companySettings?: { name: string; logoUrl: string | null };
+  currentUser?: any;
 }
 
-export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, companySettings }: SidebarProps) {
+export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, companySettings, currentUser }: SidebarProps) {
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'templates', label: 'DocBuilder (Plantillas)', icon: ClipboardList },
@@ -27,8 +30,10 @@ export function Sidebar({ collapsed, setCollapsed, currentTab, setCurrentTab, co
     { id: 'users', label: 'Gestión de Empleados', icon: Users },
     // { id: 'senders', label: 'Gestión de Remitentes', icon: UserCheck },
     { id: 'documents', label: 'Documentos Diligenciados', icon: FileText },
-    { id: 'admins', label: 'Usuarios (Admins)', icon: Users },
-    { id: 'appversions', label: 'Versiones de la App', icon: Smartphone },
+    ...(isSuperAdmin ? [
+      { id: 'admins', label: 'Usuarios (Admins)', icon: Users },
+      { id: 'appversions', label: 'Versiones de la App', icon: Smartphone },
+    ] : []),
   ];
 
   const bottomItems = [

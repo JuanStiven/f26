@@ -60,7 +60,7 @@ export function EmployeesView({
   }, [filteredEmployees, empCurrentPage, empItemsPerPage]);
 
   const filteredAdmins = useMemo(() => {
-    const list = employees.filter((e) => e.role === 'ADMIN');
+    const list = employees.filter((e) => e.role === 'ADMIN' || e.role === 'SUPER_ADMIN');
     if (!adminSearchTerm.trim()) return list;
     const term = adminSearchTerm.toLowerCase();
     return list.filter(
@@ -264,17 +264,30 @@ export function EmployeesView({
                     className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                   />
                 </div>
-                {userForm.role === 'ADMIN' && (
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">Correo Electrónico (Login Admin)</label>
-                    <input
-                      type="email"
-                      required
-                      value={userForm.email}
-                      onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                      className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
-                    />
-                  </div>
+                {(userForm.role === 'ADMIN' || userForm.role === 'SUPER_ADMIN' || isAdminsTab) && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Correo Electrónico (Login Admin)</label>
+                      <input
+                        type="email"
+                        required
+                        value={userForm.email}
+                        onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Tipo de Administrador</label>
+                      <select
+                        value={userForm.role}
+                        onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none font-medium"
+                      >
+                        <option value="ADMIN">Administrador</option>
+                        <option value="SUPER_ADMIN">Super Administrador</option>
+                      </select>
+                    </div>
+                  </>
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -367,6 +380,7 @@ export function EmployeesView({
                 <th className="px-6 py-3.5">Nombre Completo</th>
                 <th className="px-6 py-3.5">Cédula</th>
                 {isAdminsTab && <th className="px-6 py-3.5">Correo</th>}
+                {isAdminsTab && <th className="px-6 py-3.5">Rol</th>}
                 <th className="px-6 py-3.5">Cargo</th>
                 <th className="px-6 py-3.5">Estado</th>
                 <th className="px-6 py-3.5 text-right">Acciones</th>
@@ -375,7 +389,7 @@ export function EmployeesView({
             <tbody className="divide-y divide-border/60 text-xs">
               {(isAdminsTab ? adminCurrentData : empCurrentData).length === 0 ? (
                 <tr>
-                  <td colSpan={isAdminsTab ? 6 : 5} className="px-6 py-8 text-center text-muted-foreground italic">
+                  <td colSpan={isAdminsTab ? 7 : 5} className="px-6 py-8 text-center text-muted-foreground italic">
                     No se encontraron usuarios registrados.
                   </td>
                 </tr>
@@ -385,6 +399,19 @@ export function EmployeesView({
                     <td className="px-6 py-4 font-medium text-foreground">{user.name}</td>
                     <td className="px-6 py-4 text-muted-foreground font-mono">{user.document}</td>
                     {isAdminsTab && <td className="px-6 py-4 text-muted-foreground">{user.email || '--'}</td>}
+                    {isAdminsTab && (
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border ${
+                            user.role === 'SUPER_ADMIN'
+                              ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              : 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                          }`}
+                        >
+                          {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin'}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-muted-foreground">{user.position}</td>
                     <td className="px-6 py-4">
                       <span

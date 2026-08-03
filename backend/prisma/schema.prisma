@@ -13,6 +13,7 @@ datasource db {
 
 // ─── Roles del Sistema ───────────────────────────────
 enum Role {
+  SUPER_ADMIN
   ADMIN
   EMPLOYEE
 }

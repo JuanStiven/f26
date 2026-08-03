@@ -30,8 +30,13 @@ export async function create(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (role === 'ADMIN' && !email) {
+    if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && !email) {
       res.status(400).json({ success: false, message: 'El correo electrónico es requerido para administradores.' });
+      return;
+    }
+
+    if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && req.user?.role !== 'SUPER_ADMIN') {
+      res.status(403).json({ success: false, message: 'Sólo el Super Administrador puede crear usuarios administradores.' });
       return;
     }
 
@@ -44,7 +49,7 @@ export async function create(req: Request, res: Response): Promise<void> {
 
 export async function update(req: Request, res: Response): Promise<void> {
   try {
-    const employee = await employeeService.updateEmployee(getParam(req, 'id'), req.body);
+    const employee = await employeeService.updateEmployee(getParam(req, 'id'), req.body, req.user);
     res.json({ success: true, data: employee });
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });
@@ -53,7 +58,7 @@ export async function update(req: Request, res: Response): Promise<void> {
 
 export async function remove(req: Request, res: Response): Promise<void> {
   try {
-    await employeeService.deleteEmployee(getParam(req, 'id'));
+    await employeeService.deleteEmployee(getParam(req, 'id'), req.user);
     res.json({ success: true, message: 'Empleado eliminado correctamente.' });
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });

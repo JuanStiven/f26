@@ -40,13 +40,13 @@ const apk_middleware_1 = require("../middlewares/apk.middleware");
 const router = (0, express_1.Router)();
 // Público (app móvil): última versión disponible
 router.get('/latest', appVersionController.getLatest);
-// Admin: listar todas las versiones
-router.get('/', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, appVersionController.getAll);
-// Admin: subir nueva versión (APK)
-router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, apk_middleware_1.uploadApk.single('apkFile'), appVersionController.create);
-// Admin: activar/desactivar versión
-router.patch('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, appVersionController.setActive);
-// Admin: eliminar versión
-router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, appVersionController.remove);
+// Super Admin: listar todas las versiones
+router.get('/', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, appVersionController.getAll);
+// Super Admin: subir nueva versión (APK)
+router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, apk_middleware_1.uploadApk.single('apkFile'), appVersionController.create);
+// Super Admin: activar/desactivar versión
+router.patch('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, appVersionController.setActive);
+// Super Admin: eliminar versión
+router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, appVersionController.remove);
 exports.default = router;
 //# sourceMappingURL=appVersion.routes.js.map

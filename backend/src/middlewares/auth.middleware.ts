@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 export interface AuthPayload {
   userId: string;
-  role: 'ADMIN' | 'EMPLOYEE';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
   email?: string;
   document: string;
 }
@@ -43,11 +43,11 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 }
 
 /**
- * Middleware que verifica que el usuario tiene el rol de ADMIN.
+ * Middleware que verifica que el usuario tiene el rol de ADMIN o SUPER_ADMIN.
  * Debe usarse DESPUÉS de `authenticate`.
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user || req.user.role !== 'ADMIN') {
+  if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN')) {
     res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol de Administrador.' });
     return;
   }
@@ -55,11 +55,23 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
 }
 
 /**
- * Middleware que permite acceso a ADMIN o EMPLOYEE.
+ * Middleware que verifica que el usuario tiene el rol de SUPER_ADMIN.
+ * Debe usarse DESPUÉS de `authenticate`.
+ */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user || req.user.role !== 'SUPER_ADMIN') {
+    res.status(403).json({ success: false, message: 'Acceso denegado. Se requiere rol de Super Administrador.' });
+    return;
+  }
+  next();
+}
+
+/**
+ * Middleware que permite acceso a SUPER_ADMIN, ADMIN o EMPLOYEE.
  * Debe usarse DESPUÉS de `authenticate`.
  */
 export function requireEmployee(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user || (req.user.role !== 'ADMIN' && req.user.role !== 'EMPLOYEE')) {
+  if (!req.user || (req.user.role !== 'SUPER_ADMIN' && req.user.role !== 'ADMIN' && req.user.role !== 'EMPLOYEE')) {
     res.status(403).json({ success: false, message: 'Acceso denegado.' });
     return;
   }
