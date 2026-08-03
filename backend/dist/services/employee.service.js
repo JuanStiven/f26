@@ -155,6 +155,9 @@ async function deleteEmployee(id, requester) {
         throw { status: 404, message: 'Empleado no encontrado.' };
     }
     if (requester) {
+        if (requester.userId === id) {
+            throw { status: 400, message: 'No puedes eliminar tu propio usuario en sesión.' };
+        }
         const isTargetAdmin = exists.role === 'ADMIN' || exists.role === 'SUPER_ADMIN';
         const isSuper = requester.role === 'SUPER_ADMIN';
         if (isTargetAdmin && !isSuper) {

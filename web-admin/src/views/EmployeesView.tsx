@@ -104,6 +104,9 @@ export function EmployeesView({
     setIsModalOpen(true);
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handleSubmitUser = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSaveUser(userForm);
@@ -111,9 +114,17 @@ export function EmployeesView({
   };
 
   const handleConfirmDelete = async () => {
-    if (userToDelete) {
+    if (!userToDelete) return;
+    try {
+      setIsDeleting(true);
+      setDeleteError(null);
       await onDeleteUser(userToDelete.id);
       setUserToDelete(null);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'No se pudo eliminar el usuario.';
+      setDeleteError(msg);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -347,24 +358,38 @@ export function EmployeesView({
 
       {/* Modal Confirmar Eliminar */}
       {userToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs">
-          <div className="bg-card w-full max-w-sm rounded-xl shadow-xl p-6 space-y-4 text-center">
-            <h3 className="font-bold text-foreground">¿Eliminar Usuario?</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-card w-full max-w-sm rounded-xl shadow-xl p-6 space-y-4 text-center border border-border">
+            <h3 className="font-bold text-foreground text-base">¿Eliminar Usuario?</h3>
             <p className="text-xs text-muted-foreground">
               ¿Estás seguro de eliminar a <strong className="text-foreground">{userToDelete.name}</strong>? Esta acción no se puede deshacer.
             </p>
+
+            {deleteError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600 dark:text-red-400 text-xs text-left font-medium leading-normal">
+                {deleteError}
+              </div>
+            )}
+
             <div className="flex justify-center gap-3 pt-2">
               <button
-                onClick={() => setUserToDelete(null)}
-                className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted"
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setUserToDelete(null);
+                  setDeleteError(null);
+                }}
+                className="px-4 py-2 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
+                type="button"
+                disabled={isDeleting}
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-lg bg-destructive text-white text-xs font-medium hover:bg-destructive/95"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-colors shadow-xs flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
               >
-                Eliminar
+                {isDeleting ? 'Eliminando...' : 'Eliminar'}
               </button>
             </div>
           </div>

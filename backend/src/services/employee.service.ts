@@ -171,6 +171,10 @@ export async function deleteEmployee(
   }
 
   if (requester) {
+    if (requester.userId === id) {
+      throw { status: 400, message: 'No puedes eliminar tu propio usuario en sesión.' };
+    }
+
     const isTargetAdmin = (exists.role as string) === 'ADMIN' || (exists.role as string) === 'SUPER_ADMIN';
     const isSuper = requester.role === 'SUPER_ADMIN';
 
