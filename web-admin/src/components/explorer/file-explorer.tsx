@@ -225,7 +225,7 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
   };
 
   // Crear Archivo
-  const handleCreateFile = () => {
+  const handleCreateFile = async () => {
     if (!newFileName.trim()) return;
     let finalName = newFileName.trim();
     const ext = newFileType === 'template' ? '.json' : '.pdf';
@@ -244,23 +244,43 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
       return;
     }
 
-    const newNode: FileNode = {
-      id: `fil_${Math.random().toString(36).substr(2, 9)}`,
-      name: finalName,
-      type: 'file',
-      fileType: newFileType,
-      path: newPath,
-      size: '0 KB',
-      createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      author: 'Admin',
-      content: newFileType === 'document' ? 'Documento operativo firmado digitalmente.' : undefined,
-      fields: newFileType === 'template' ? [] : undefined
-    };
+    try {
+      const { default: api } = await import('../../utils/api');
 
-    setNodes(prev => [...prev, newNode]);
-    setNewFileName('');
-    setCreatingInFolder(null);
-    setSelectedPath(newPath);
+      if (newFileType === 'template') {
+        // Persistir como plantilla real en el backend (storagePath = carpeta actual)
+        const response = await api.post('/templates', {
+          name: finalName.replace(/\.json$/i, ''),
+          storagePath: parentPath || '',
+          fields: [],
+          assignedUsers: [],
+        });
+        const t = response.data.data;
+        const newNode: FileNode = {
+          id: `fil_tpl_${t.id}`,
+          name: finalName,
+          type: 'file',
+          fileType: 'template',
+          path: newPath,
+          size: '0 KB',
+          createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          author: 'Admin',
+          fields: t.fields || [],
+        };
+        setNodes(prev => [...prev, newNode]);
+      } else {
+        alert('Los documentos diligenciados (.pdf) se generan desde la app móvil al firmar. No se pueden crear manualmente desde el explorador.');
+        setNewFileName('');
+        setCreatingInFolder(null);
+        return;
+      }
+
+      setNewFileName('');
+      setCreatingInFolder(null);
+      setSelectedPath(newPath);
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error creando el archivo');
+    }
   };
 
   // Eliminar Carpeta o Archivo
@@ -272,7 +292,18 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
       const { default: api } = await import('../../utils/api');
       
       if (node.type === 'folder') {
-        await api.delete(`/folders/${node.id}`);
+        if (node.id.startsWith('fol_auto_')) {
+          // Carpeta virtual auto-creada desde el storagePath de las plantillas:
+          // eliminar plantillas/documentos reales bajo esa ruta
+          const prefix = node.path + '/';
+          const under = (p?: string | null) => !!p && (p === node.path || p.startsWith(prefix));
+          const tpls = templates.filter(t => under(t.storagePath));
+          const docs = signedDocuments.filter(d => under(d.filePath));
+          for (const t of tpls) await api.delete(`/templates/${t.id}`);
+          for (const d of docs) await api.delete(`/documents/${d.id}`);
+        } else {
+          await api.delete(`/folders/${node.id}`);
+        }
         // Eliminar carpeta y todos sus descendientes
         setNodes(prev => prev.filter(n => n.path !== node.path && !n.path.startsWith(node.path + '/')));
       } else {
@@ -317,6 +348,11 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
 
       if (node.type === 'folder') {
         await api.patch(`/folders/${node.id}/rename`, { newName: newNameText.trim() });
+      } else if (node.fileType === 'template' && node.id.startsWith('fil_tpl_')) {
+        // Renombrar plantilla real (sin extensión .json)
+        await api.put(`/templates/${node.id.replace('fil_tpl_', '')}`, {
+          name: newNameText.trim().replace(/\.json$/i, ''),
+        });
       }
 
       // Actualizar nodo actual y todos los descendientes en caso de que sea carpeta
@@ -341,7 +377,7 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
   };
 
   // Mover Nodo (Cambiar ruta)
-  const handleMoveNode = () => {
+  const handleMoveNode = async () => {
     if (!movingNode) return;
     const dest = moveDestinationPath === 'Raíz' ? '' : moveDestinationPath;
     
@@ -361,20 +397,37 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
       return;
     }
 
-    // Actualizar nodo y descendientes
-    setNodes(prev => prev.map(n => {
-      if (n.id === movingNode.id) {
-        return { ...n, path: newPath };
-      }
-      if (movingNode.type === 'folder' && n.path.startsWith(movingNode.path + '/')) {
-        const remainingPart = n.path.substring(movingNode.path.length);
-        return { ...n, path: newPath + remainingPart };
-      }
-      return n;
-    }));
+    try {
+      const { default: api } = await import('../../utils/api');
 
-    setSelectedPath(newPath);
-    setMovingNode(null);
+      if (movingNode.type === 'folder' && !movingNode.id.startsWith('fol_auto_')) {
+        // Mover carpeta real en BD (sus plantillas/documentos conservan storagePath; se
+        // reubican automáticamente en el árbol por el prefijo de ruta)
+        await api.patch(`/folders/${movingNode.id}/move`, { newParentPath: dest || null });
+      } else if (movingNode.fileType === 'template' && movingNode.id.startsWith('fil_tpl_')) {
+        // Mover plantilla real: actualizar storagePath
+        await api.put(`/templates/${movingNode.id.replace('fil_tpl_', '')}`, {
+          storagePath: dest || '',
+        });
+      }
+
+      // Actualizar nodo y descendientes
+      setNodes(prev => prev.map(n => {
+        if (n.id === movingNode.id) {
+          return { ...n, path: newPath };
+        }
+        if (movingNode.type === 'folder' && n.path.startsWith(movingNode.path + '/')) {
+          const remainingPart = n.path.substring(movingNode.path.length);
+          return { ...n, path: newPath + remainingPart };
+        }
+        return n;
+      }));
+
+      setSelectedPath(newPath);
+      setMovingNode(null);
+    } catch (error: any) {
+      alert(error.response?.data?.message || 'Error al mover el elemento');
+    }
   };
 
   // Nodo seleccionado actual

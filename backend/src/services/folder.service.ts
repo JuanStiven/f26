@@ -1,6 +1,8 @@
 import prisma from '../models/prisma';
 import path from 'path';
 import fs from 'fs';
+import { deleteTemplate } from './template.service';
+import { deleteDocument } from './document.service';
 
 /**
  * Listar todas las carpetas del sistema
@@ -176,6 +178,8 @@ export async function moveFolder(id: string, newParentPath: string | null) {
 
 /**
  * Eliminar carpeta y todos sus descendientes
+ * Incluye cascada: borra plantillas cuyo storagePath está dentro de la carpeta
+ * y documentos cuyo filePath está dentro de la carpeta (BD + archivo físico).
  */
 export async function deleteFolder(id: string) {
   const folder = await prisma.folder.findUnique({ where: { id } });
@@ -183,22 +187,54 @@ export async function deleteFolder(id: string) {
     throw { status: 404, message: 'Carpeta no encontrada.' };
   }
 
-  // Eliminar descendientes primero
-  await prisma.folder.deleteMany({
-    where: { path: { startsWith: folder.path + '/' } },
+  const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+  const prefix = folder.path + '/';
+  const inside = (p?: string | null) => !!p && (p === folder.path || p.startsWith(prefix));
+
+  // ─── 1. Eliminar documentos cuyo filePath esté dentro de la carpeta (BD + PDF físico) ───
+  const docs = await prisma.signedDocument.findMany({
+    where: {
+      OR: [
+        { filePath: folder.path },
+        { filePath: { startsWith: prefix } },
+      ],
+    },
+    select: { id: true },
   });
 
-  // Eliminar la carpeta
+  for (const doc of docs) {
+    await deleteDocument(doc.id);
+  }
+
+  // ─── 2. Eliminar plantillas cuyo storagePath esté dentro de la carpeta ───
+  const tpls = await prisma.template.findMany({
+    where: {
+      OR: [
+        { storagePath: folder.path },
+        { storagePath: { startsWith: prefix } },
+      ],
+    },
+    select: { id: true },
+  });
+  for (const tpl of tpls) {
+    await deleteTemplate(tpl.id);
+  }
+
+  // ─── 3. Eliminar subcarpetas (BD) ───
+  await prisma.folder.deleteMany({
+    where: { path: { startsWith: prefix } },
+  });
+
+  // ─── 4. Eliminar la carpeta (BD) ───
   await prisma.folder.delete({ where: { id } });
 
-  // Eliminar del disco
-  const uploadsDir = path.resolve(process.env.UPLOADS_DIR || './uploads');
+  // ─── 5. Eliminar del disco (contenido restante) ───
   const fullPath = path.join(uploadsDir, folder.path);
   if (fs.existsSync(fullPath)) {
     fs.rmSync(fullPath, { recursive: true, force: true });
   }
 
-  return { message: 'Carpeta eliminada correctamente.' };
+  return { message: 'Carpeta y su contenido eliminados correctamente.' };
 }
 
 /**

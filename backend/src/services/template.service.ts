@@ -12,7 +12,7 @@ export async function getAllTemplates() {
 }
 
 export async function getTemplatesForUser(userId: string, role: string) {
-  if (role === 'ADMIN') {
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
     return getAllTemplates();
   } else {
     return prisma.template.findMany({
