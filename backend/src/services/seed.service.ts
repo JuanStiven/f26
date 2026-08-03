@@ -8,7 +8,33 @@ import { Role } from '@prisma/client';
  */
 export async function seedDatabase() {
   try {
-    // Asegurar que existe al menos un SUPER_ADMIN
+    // ─── Ensure default SUPER_ADMIN user exists (For Production & Dev) ───
+    const defaultSuperAdminEmail = 'superadmin@esenorte3.gov.co';
+    let superAdminUser = await prisma.user.findUnique({ where: { email: defaultSuperAdminEmail } });
+
+    if (!superAdminUser) {
+      const hashedPassword = await bcrypt.hash('superadmin123', 10);
+      superAdminUser = await prisma.user.create({
+        data: {
+          name: 'Super Administrador del Sistema',
+          email: defaultSuperAdminEmail,
+          document: '1000000000',
+          password: hashedPassword,
+          role: 'SUPER_ADMIN' as Role,
+          status: 'Activo',
+          position: 'Super Administrador del Sistema',
+        },
+      });
+      console.log('  👑 Usuario Super Admin creado por migración automática:', defaultSuperAdminEmail);
+    } else if ((superAdminUser.role as string) !== 'SUPER_ADMIN') {
+      await prisma.user.update({
+        where: { id: superAdminUser.id },
+        data: { role: 'SUPER_ADMIN' as Role }
+      });
+      console.log('  👑 Usuario', defaultSuperAdminEmail, 'actualizado a SUPER_ADMIN.');
+    }
+
+    // Asegurar que exista al menos un SUPER_ADMIN (fallback si el anterior no existiera)
     const superAdminCount = await prisma.user.count({ where: { role: ('SUPER_ADMIN' as Role) } });
     if (superAdminCount === 0) {
       const firstAdmin = await prisma.user.findFirst({ where: { role: ('ADMIN' as Role) } });
