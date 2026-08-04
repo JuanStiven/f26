@@ -47,7 +47,7 @@ router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin,
 router.patch('/:id/rename', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, folderController.rename);
 // Mover carpeta
 router.patch('/:id/move', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, folderController.move);
-// Eliminar carpeta
-router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, folderController.remove);
+// Eliminar carpeta (solo super admin)
+router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, folderController.remove);
 exports.default = router;
 //# sourceMappingURL=folder.routes.js.map

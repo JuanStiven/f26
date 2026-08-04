@@ -23,24 +23,36 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
 export async function create(req: Request, res: Response): Promise<void> {
   try {
-    const { name, document, pin, position, role, email } = req.body;
+    const { name, document, pin, password, position, role, email } = req.body;
 
-    if (!name || !document || !pin) {
-      res.status(400).json({ success: false, message: 'Nombre, cédula y PIN son requeridos.' });
+    if (!name || !document) {
+      res.status(400).json({ success: false, message: 'Nombre y cédula son requeridos.' });
       return;
     }
 
-    if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && !email) {
+    const isAdminRole = role === 'ADMIN' || role === 'SUPER_ADMIN';
+
+    if (isAdminRole && !email) {
       res.status(400).json({ success: false, message: 'El correo electrónico es requerido para administradores.' });
       return;
     }
 
-    if ((role === 'ADMIN' || role === 'SUPER_ADMIN') && req.user?.role !== 'SUPER_ADMIN') {
+    if (isAdminRole && !password) {
+      res.status(400).json({ success: false, message: 'La contraseña es requerida para administradores.' });
+      return;
+    }
+
+    if (!isAdminRole && !pin) {
+      res.status(400).json({ success: false, message: 'El PIN es requerido para empleados.' });
+      return;
+    }
+
+    if (isAdminRole && req.user?.role !== 'SUPER_ADMIN') {
       res.status(403).json({ success: false, message: 'Sólo el Super Administrador puede crear usuarios administradores.' });
       return;
     }
 
-    const employee = await employeeService.createEmployee({ name, document, pin, position, role, email });
+    const employee = await employeeService.createEmployee({ name, document, pin, password, position, role, email });
     res.status(201).json({ success: true, data: employee });
   } catch (error: any) {
     res.status(error.status || 500).json({ success: false, message: error.message });

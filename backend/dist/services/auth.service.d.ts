@@ -12,14 +12,15 @@ export declare function loginAdmin(email: string, password: string): Promise<{
     };
 }>;
 /**
- * Login para Empleados (cédula + PIN)
+ * Login para la App Móvil (cédula + PIN)
+ * Aplica a cualquier usuario activo: EMPLOYEE, ADMIN o SUPER_ADMIN.
  */
 export declare function loginEmployee(document: string, pin: string): Promise<{
     token: string;
     user: {
         id: string;
         name: string;
-        role: "EMPLOYEE";
+        role: import(".prisma/client").$Enums.Role;
         document: string;
         position: string | null;
     };

@@ -59,7 +59,8 @@ export async function getEmployeeById(id: string) {
 export async function createEmployee(data: {
   name: string;
   document: string;
-  pin: string;
+  pin?: string;
+  password?: string;
   position?: string;
   role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
   email?: string;
@@ -77,16 +78,28 @@ export async function createEmployee(data: {
     }
   }
 
-  const hashedPin = await bcrypt.hash(data.pin, 10);
   const userRole = data.role || 'EMPLOYEE';
+  const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+
+  // Admin: contraseña obligatoria (login web). Empleado: PIN obligatorio (login móvil).
+  if (isAdmin && !data.password) {
+    throw { status: 400, message: 'La contraseña es requerida para usuarios administradores.' };
+  }
+  if (!isAdmin && !data.pin) {
+    throw { status: 400, message: 'El PIN es requerido para empleados.' };
+  }
+
+  const hashedPin = data.pin ? await bcrypt.hash(data.pin, 10) : null;
+  const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : null;
 
   return prisma.user.create({
     data: {
       name: data.name,
       document: data.document,
-      password: hashedPin,
+      password: hashedPassword,
+      pin: hashedPin,
       role: userRole as Role,
-      position: data.position || (userRole === 'SUPER_ADMIN' ? 'Super Administrador' : userRole === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
+      position: data.position || (isAdmin ? 'Administrador' : 'Operario de Campo'),
       status: 'Activo',
       email: data.email || null,
     },
@@ -105,7 +118,7 @@ export async function createEmployee(data: {
 
 export async function updateEmployee(
   id: string,
-  data: { name?: string; position?: string; status?: string; pin?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE'; email?: string },
+  data: { name?: string; position?: string; status?: string; pin?: string; password?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE'; email?: string },
   requester?: { userId: string; role: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE' }
 ) {
   const exists = await prisma.user.findUnique({ where: { id } });
@@ -140,7 +153,8 @@ export async function updateEmployee(
   if (data.status) updateData.status = data.status;
   if (data.role) updateData.role = data.role as Role;
   if (data.email !== undefined) updateData.email = data.email || null;
-  if (data.pin) updateData.password = await bcrypt.hash(data.pin, 10);
+  if (data.pin) updateData.pin = await bcrypt.hash(data.pin, 10);
+  if (data.password) updateData.password = await bcrypt.hash(data.password, 10);
 
   return prisma.user.update({
     where: { id },

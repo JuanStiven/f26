@@ -52,6 +52,8 @@ export declare function moveFolder(id: string, newParentPath: string | null): Pr
 }>;
 /**
  * Eliminar carpeta y todos sus descendientes
+ * Incluye cascada: borra plantillas cuyo storagePath está dentro de la carpeta
+ * y documentos cuyo filePath está dentro de la carpeta (BD + archivo físico).
  */
 export declare function deleteFolder(id: string): Promise<{
     message: string;

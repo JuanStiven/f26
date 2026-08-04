@@ -78,7 +78,7 @@ async function seedDatabase() {
             data: {
                 name: 'Carlos Mario Torres',
                 document: '1098765432',
-                password: pin1,
+                pin: pin1,
                 role: 'EMPLOYEE',
                 status: 'Activo',
                 position: 'Operario de Campo',
@@ -88,7 +88,7 @@ async function seedDatabase() {
             data: {
                 name: 'Laura Camila Ortiz',
                 document: '1087654321',
-                password: pin2,
+                pin: pin2,
                 role: 'EMPLOYEE',
                 status: 'Activo',
                 position: 'Enfermera Jefa',
@@ -98,7 +98,7 @@ async function seedDatabase() {
             data: {
                 name: 'Andrés Felipe Restrepo',
                 document: '1076543210',
-                password: pin3,
+                pin: pin3,
                 role: 'EMPLOYEE',
                 status: 'Inactivo',
                 position: 'Técnico Domiciliario',

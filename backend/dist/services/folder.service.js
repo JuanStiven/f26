@@ -13,6 +13,8 @@ exports.listFilesInPath = listFilesInPath;
 const prisma_1 = __importDefault(require("../models/prisma"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const template_service_1 = require("./template.service");
+const document_service_1 = require("./document.service");
 /**
  * Listar todas las carpetas del sistema
  */
@@ -160,25 +162,55 @@ async function moveFolder(id, newParentPath) {
 }
 /**
  * Eliminar carpeta y todos sus descendientes
+ * Incluye cascada: borra plantillas cuyo storagePath está dentro de la carpeta
+ * y documentos cuyo filePath está dentro de la carpeta (BD + archivo físico).
  */
 async function deleteFolder(id) {
     const folder = await prisma_1.default.folder.findUnique({ where: { id } });
     if (!folder) {
         throw { status: 404, message: 'Carpeta no encontrada.' };
     }
-    // Eliminar descendientes primero
-    await prisma_1.default.folder.deleteMany({
-        where: { path: { startsWith: folder.path + '/' } },
-    });
-    // Eliminar la carpeta
-    await prisma_1.default.folder.delete({ where: { id } });
-    // Eliminar del disco
     const uploadsDir = path_1.default.resolve(process.env.UPLOADS_DIR || './uploads');
+    const prefix = folder.path + '/';
+    const inside = (p) => !!p && (p === folder.path || p.startsWith(prefix));
+    // ─── 1. Eliminar documentos cuyo filePath esté dentro de la carpeta (BD + PDF físico) ───
+    const docs = await prisma_1.default.signedDocument.findMany({
+        where: {
+            OR: [
+                { filePath: folder.path },
+                { filePath: { startsWith: prefix } },
+            ],
+        },
+        select: { id: true },
+    });
+    for (const doc of docs) {
+        await (0, document_service_1.deleteDocument)(doc.id);
+    }
+    // ─── 2. Eliminar plantillas cuyo storagePath esté dentro de la carpeta ───
+    const tpls = await prisma_1.default.template.findMany({
+        where: {
+            OR: [
+                { storagePath: folder.path },
+                { storagePath: { startsWith: prefix } },
+            ],
+        },
+        select: { id: true },
+    });
+    for (const tpl of tpls) {
+        await (0, template_service_1.deleteTemplate)(tpl.id);
+    }
+    // ─── 3. Eliminar subcarpetas (BD) ───
+    await prisma_1.default.folder.deleteMany({
+        where: { path: { startsWith: prefix } },
+    });
+    // ─── 4. Eliminar la carpeta (BD) ───
+    await prisma_1.default.folder.delete({ where: { id } });
+    // ─── 5. Eliminar del disco (contenido restante) ───
     const fullPath = path_1.default.join(uploadsDir, folder.path);
     if (fs_1.default.existsSync(fullPath)) {
         fs_1.default.rmSync(fullPath, { recursive: true, force: true });
     }
-    return { message: 'Carpeta eliminada correctamente.' };
+    return { message: 'Carpeta y su contenido eliminados correctamente.' };
 }
 /**
  * Listar archivos físicos en una ruta (complemento al árbol de BD)

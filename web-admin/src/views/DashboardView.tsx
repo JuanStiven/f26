@@ -1,4 +1,5 @@
 import { FileText, Users, Grid, CheckCircle, Eye, FileDown, Plus, ArrowRight, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
+import { getApiBaseUrl } from '../utils/imageUrl';
 
 interface DashboardViewProps {
   signedDocuments: any[];
@@ -134,8 +135,7 @@ export function DashboardView({
                         </button>
                         <button
                           onClick={() => {
-                            const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-                            window.open(`${baseUrl}/uploads/${doc.filePath}`, '_blank');
+                            window.open(`${getApiBaseUrl()}/uploads/${doc.filePath}`, '_blank');
                           }}
                           className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                           title="Descargar PDF"

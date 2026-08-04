@@ -568,11 +568,16 @@ export default function App() {
     }
     try {
       const { default: api } = await import('./utils/api');
-      const response = await api.put(`/employees/${currentUser.id}`, { pin: securityForm.newPassword });
+      const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+      // Admin actualiza su contraseña de acceso web; empleado actualiza su PIN de la app móvil.
+      const payload = isAdmin
+        ? { password: securityForm.newPassword }
+        : { pin: securityForm.newPassword };
+      const response = await api.put(`/employees/${currentUser.id}`, payload);
       if (response.data.success) {
         setIsSecurityModalOpen(false);
         setSecurityForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-        alert('Contraseña actualizada con éxito');
+        alert(isAdmin ? 'Contraseña actualizada con éxito' : 'PIN actualizado con éxito');
       }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Error al actualizar contraseña');

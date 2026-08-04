@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, UploadCloud, Trash2, CheckCircle2, XCircle, Smartphone, Download } from 'lucide-react';
+import { getApiBaseUrl } from '../utils/imageUrl';
 
 interface AppVersion {
   id: string;
@@ -275,8 +276,7 @@ export function AppVersionsView() {
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => {
-                            const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-                            window.open(`${baseUrl}${v.apkPath}`, '_blank');
+                            window.open(`${getApiBaseUrl()}${v.apkPath}`, '_blank');
                           }}
                           className="p-1.5 rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
                           title="Descargar APK"

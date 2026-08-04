@@ -31,7 +31,8 @@ model User {
   name      String
   email     String?  @unique
   document  String   @unique // Cédula
-  password  String   // Hash bcrypt (admin) o PIN hasheado (empleados)
+  password  String?  // Hash bcrypt — contraseña de acceso al Web Admin (admins)
+  pin       String?  // Hash bcrypt — PIN de acceso a la app móvil (cédula + PIN)
   role      Role     @default(EMPLOYEE)
   status    String   @default("Activo") // Activo, Inactivo
   position  String?  // Cargo: Operario, Enfermera, etc.

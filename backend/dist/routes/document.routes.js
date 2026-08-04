@@ -47,7 +47,7 @@ router.get('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireEmpl
 router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireEmployee, documentController.create);
 // Actualizar estado de sincronización
 router.patch('/:id/sync', auth_middleware_1.authenticate, auth_middleware_1.requireEmployee, documentController.updateSync);
-// Eliminar documento (solo admin)
-router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, documentController.remove);
+// Eliminar documento (solo super admin)
+router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, documentController.remove);
 exports.default = router;
 //# sourceMappingURL=document.routes.js.map

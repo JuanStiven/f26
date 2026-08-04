@@ -73,15 +73,25 @@ async function createEmployee(data) {
             throw { status: 409, message: 'Ya existe un usuario con este correo electrónico.' };
         }
     }
-    const hashedPin = await bcryptjs_1.default.hash(data.pin, 10);
     const userRole = data.role || 'EMPLOYEE';
+    const isAdmin = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+    // Admin: contraseña obligatoria (login web). Empleado: PIN obligatorio (login móvil).
+    if (isAdmin && !data.password) {
+        throw { status: 400, message: 'La contraseña es requerida para usuarios administradores.' };
+    }
+    if (!isAdmin && !data.pin) {
+        throw { status: 400, message: 'El PIN es requerido para empleados.' };
+    }
+    const hashedPin = data.pin ? await bcryptjs_1.default.hash(data.pin, 10) : null;
+    const hashedPassword = data.password ? await bcryptjs_1.default.hash(data.password, 10) : null;
     return prisma_1.default.user.create({
         data: {
             name: data.name,
             document: data.document,
-            password: hashedPin,
+            password: hashedPassword,
+            pin: hashedPin,
             role: userRole,
-            position: data.position || (userRole === 'SUPER_ADMIN' ? 'Super Administrador' : userRole === 'ADMIN' ? 'Administrador' : 'Operario de Campo'),
+            position: data.position || (isAdmin ? 'Administrador' : 'Operario de Campo'),
             status: 'Activo',
             email: data.email || null,
         },
@@ -131,7 +141,9 @@ async function updateEmployee(id, data, requester) {
     if (data.email !== undefined)
         updateData.email = data.email || null;
     if (data.pin)
-        updateData.password = await bcryptjs_1.default.hash(data.pin, 10);
+        updateData.pin = await bcryptjs_1.default.hash(data.pin, 10);
+    if (data.password)
+        updateData.password = await bcryptjs_1.default.hash(data.password, 10);
     return prisma_1.default.user.update({
         where: { id },
         data: updateData,

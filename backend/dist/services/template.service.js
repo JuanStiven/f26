@@ -23,7 +23,7 @@ async function getAllTemplates() {
     });
 }
 async function getTemplatesForUser(userId, role) {
-    if (role === 'ADMIN') {
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
         return getAllTemplates();
     }
     else {

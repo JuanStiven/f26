@@ -52,7 +52,7 @@ router.get('/:id/export', auth_middleware_1.authenticate, auth_middleware_1.requ
 router.post('/', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.create);
 // Actualizar plantilla (solo admin)
 router.put('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.update);
-// Eliminar plantilla (solo admin)
-router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireAdmin, templateController.remove);
+// Eliminar plantilla (solo super admin)
+router.delete('/:id', auth_middleware_1.authenticate, auth_middleware_1.requireSuperAdmin, templateController.remove);
 exports.default = router;
 //# sourceMappingURL=template.routes.js.map

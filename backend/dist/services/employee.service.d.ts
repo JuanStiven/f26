@@ -41,7 +41,8 @@ export declare function getEmployeeById(id: string): Promise<{
 export declare function createEmployee(data: {
     name: string;
     document: string;
-    pin: string;
+    pin?: string;
+    password?: string;
     position?: string;
     role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
     email?: string;
@@ -60,6 +61,7 @@ export declare function updateEmployee(id: string, data: {
     position?: string;
     status?: string;
     pin?: string;
+    password?: string;
     role?: 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
     email?: string;
 }, requester?: {
@@ -82,7 +84,8 @@ export declare function deleteEmployee(id: string, requester?: {
     id: string;
     email: string | null;
     document: string;
-    password: string;
+    password: string | null;
+    pin: string | null;
     role: import(".prisma/client").$Enums.Role;
     status: string;
     position: string | null;

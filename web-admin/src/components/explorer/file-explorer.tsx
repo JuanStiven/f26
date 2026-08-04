@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TemplatePreview } from '../TemplatePreview';
-import { resolveImageUrl } from '../../utils/imageUrl';
+import { resolveImageUrl, getApiBaseUrl } from '../../utils/imageUrl';
 import { 
   Folder, 
   FolderOpen, 
@@ -941,8 +941,7 @@ export function FileExplorer({ templates, signedDocuments, folders, onRefresh, i
                           <button 
                             onClick={() => {
                               setActionsDropdownOpen(false);
-                              const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-                              window.open(`${baseUrl}/uploads/${currentNode.path}`, '_blank');
+                              window.open(`${getApiBaseUrl()}/uploads/${currentNode.path}`, '_blank');
                             }}
                             className="px-3 py-2 hover:bg-muted text-foreground text-xs rounded-md flex items-center gap-2 font-medium transition-all text-left"
                           >

@@ -36,6 +36,7 @@ export function EmployeesView({
     name: '',
     document: '',
     pin: '',
+    password: '',
     position: '',
     status: 'Activo',
     role: 'EMPLOYEE',
@@ -82,6 +83,7 @@ export function EmployeesView({
       name: '',
       document: '',
       pin: '',
+      password: '',
       position: role === 'ADMIN' ? 'Administrador' : '',
       status: 'Activo',
       role,
@@ -96,6 +98,7 @@ export function EmployeesView({
       name: user.name || '',
       document: user.document || '',
       pin: user.pin || '',
+      password: '',
       position: user.position || '',
       status: user.status || 'Activo',
       role: user.role || 'EMPLOYEE',
@@ -288,6 +291,17 @@ export function EmployeesView({
                       />
                     </div>
                     <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Contraseña (Login Web Admin)</label>
+                      <input
+                        type="password"
+                        required={!userForm.id}
+                        placeholder={userForm.id ? 'Dejar en blanco para no cambiar' : '••••••••'}
+                        value={userForm.password}
+                        onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                        className="w-full text-sm p-2 rounded-lg border border-border bg-background focus:ring-1 focus:ring-primary focus:border-primary outline-none font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
                       <label className="text-xs font-medium text-muted-foreground">Tipo de Administrador</label>
                       <select
                         value={userForm.role}
@@ -302,7 +316,7 @@ export function EmployeesView({
                 )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-muted-foreground">PIN de Acceso</label>
+                    <label className="text-xs font-medium text-muted-foreground">PIN de Acceso (App Móvil)</label>
                     <input
                       type="password"
                       maxLength={6}

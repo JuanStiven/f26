@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { FileExplorer } from '../components/explorer/file-explorer';
 import { Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Eye, FileDown, RefreshCw, Trash2 } from 'lucide-react';
+import { getApiBaseUrl } from '../utils/imageUrl';
 
 interface FileExplorerViewProps {
   currentTab: 'explorer' | 'documents' | string;
@@ -185,8 +186,7 @@ export function FileExplorerView({
                       </button>
                       <button
                         onClick={() => {
-                          const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-                          window.open(`${baseUrl}/uploads/${doc.filePath}`, '_blank');
+                          window.open(`${getApiBaseUrl()}/uploads/${doc.filePath}`, '_blank');
                         }}
                         className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
                         title="Descargar PDF"

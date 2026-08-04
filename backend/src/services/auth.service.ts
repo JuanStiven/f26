@@ -9,7 +9,7 @@ import { AuthPayload } from '../middlewares/auth.middleware';
 export async function loginAdmin(email: string, password: string) {
   const user = await prisma.user.findUnique({ where: { email } });
 
-  if (!user || ((user.role as string) !== 'ADMIN' && (user.role as string) !== 'SUPER_ADMIN')) {
+  if (!user || !user.password || ((user.role as string) !== 'ADMIN' && (user.role as string) !== 'SUPER_ADMIN')) {
     throw { status: 401, message: 'Credenciales inválidas.' };
   }
 
@@ -42,12 +42,13 @@ export async function loginAdmin(email: string, password: string) {
 }
 
 /**
- * Login para Empleados (cédula + PIN)
+ * Login para la App Móvil (cédula + PIN)
+ * Aplica a cualquier usuario activo: EMPLOYEE, ADMIN o SUPER_ADMIN.
  */
 export async function loginEmployee(document: string, pin: string) {
   const user = await prisma.user.findUnique({ where: { document } });
 
-  if (!user || user.role !== 'EMPLOYEE') {
+  if (!user) {
     throw { status: 401, message: 'Cédula no registrada en el sistema.' };
   }
 
@@ -55,7 +56,13 @@ export async function loginEmployee(document: string, pin: string) {
     throw { status: 403, message: 'Tu cuenta está inactiva. Contacta al administrador.' };
   }
 
-  const isValid = await bcrypt.compare(pin, user.password);
+  // El PIN vive en `pin` (nuevo) con fallback al hash legacy en `password`
+  const pinHash = user.pin || user.password;
+  if (!pinHash) {
+    throw { status: 401, message: 'PIN no configurado para este usuario.' };
+  }
+
+  const isValid = await bcrypt.compare(pin, pinHash);
   if (!isValid) {
     throw { status: 401, message: 'PIN incorrecto.' };
   }
